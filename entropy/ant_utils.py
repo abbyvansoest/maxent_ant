@@ -30,6 +30,39 @@ args = utils.get_args()
 
 env = gym.make('Ant-v2')
 
+dim_dict = {
+    0:"x",
+    1:"y",
+    2:"z",
+    3:"x torso",
+    4:"y torso",
+    5:"z torso",
+    6:"w torso",
+    7:"joint 1 angle",
+    8:"joint 2 angle",
+    9:"joint 3 angle",
+    10:"joint 4 angle",
+    11:"joint 5 angle",
+    12:"joint 6 angle",
+    13:"joint 7 angle",
+    14:"joint 8 angle",
+    15:"3d veloity/angular velocity",
+    16:"3d veloity/angular velocity",
+    17:"3d veloity/angular velocity",
+    18:"3d veloity/angular velocity",
+    19:"3d veloity/angular velocity",
+    20:"3d veloity/angular velocity",
+    21:"3d veloity/angular velocity",
+    22:"3d veloity/angular velocity",
+    23:"joint velocity",
+    24:"joint velocity",
+    25:"joint velocity",
+    26:"joint velocity",
+    27:"joint velocity",
+    28:"joint velocity",
+    29:"joint velocity",
+}
+
 qpos = env.env.init_qpos
 qvel = env.env.init_qvel
 
@@ -42,6 +75,8 @@ max_bin = 3
 height_bins = 20
 num_bins = 20
 
+start = 3
+stop = 5
 num_bins_full = 10
 
 reduce_dim = args.reduce_dim
@@ -73,8 +108,6 @@ def get_state_bins_reduced():
         state_bins.append(discretize_range(min_bin, max_bin, num_bins))
     return state_bins
 
-start = 0
-stop = 3
 def get_state_bins_full_state():
     state_bins = []
     for i in range(start, stop):
@@ -101,11 +134,11 @@ num_states_full = tuple([num_bins_full for i in range(start, stop)])
 # Discretize the observation features and reduce them to a single list.
 def discretize_state_full(observation):
     state = []
-    for i, feature in enumerate(observation):
-        if i >= stop:
-            break
-        state.append(discretize_value(feature, state_bins_full[i]))
+    for i in range(start, stop):
+        feature = observation[i]
+        state.append(discretize_value(feature, state_bins_full[i - start]))
     return state
+# Goal: discretize the state 
 
 def discretize_state_normal(observation):
     state = []

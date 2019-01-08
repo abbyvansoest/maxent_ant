@@ -86,7 +86,7 @@ def execute_average_policy(env, policies, T, initial_state=[], n=10, render=Fals
 
     denom = 0
     
-    hi = len(policies) - 1
+    max_idx = len(policies) - 1
     
     # collect the full distribution over all states here.
     # later, slice it into each individual distribution and print.
@@ -116,7 +116,7 @@ def execute_average_policy(env, policies, T, initial_state=[], n=10, render=Fals
             
             # select random policy uniform distribution
             # take non-deterministic action for that policy
-            idx = random.randint(0, hi)
+            idx = random.randint(0, max_idx)
             
             # OR
             # average the mu
@@ -127,8 +127,7 @@ def execute_average_policy(env, policies, T, initial_state=[], n=10, render=Fals
             #action = np.zeros(shape=(1,ant_utils.action_dim))
             #for i, sac in enumerate(policies):
                 #a = sac.get_action(obs, deterministic=False)
-                # a_det = sac.get_action(obs, deterministic=True) # question: is this returning the same value?
-                # print("non-det: %s \t det: %s" % (str(a), str(a_det)))
+                # a_det = sac.get_action(obs, deterministic=True)
                 #action += a
                 #print("policy %d: %s" % (i, str(a_det)))
             #action /= len(policies)
@@ -137,7 +136,6 @@ def execute_average_policy(env, policies, T, initial_state=[], n=10, render=Fals
             action = policies[idx].get_action(obs, deterministic=False)
             obs, reward, done, _ = env.step(action)
             p[tuple(ant_utils.discretize_state(get_state(env, obs)))] += 1
-            # print(tuple(ant_utils.discretize_state_full(get_state(env, obs))))
             p_full_dim[tuple(ant_utils.discretize_state_full(get_state(env, obs)))] += 1
             
             denom += 1
@@ -237,7 +235,8 @@ def collect_entropy_policies(env, epochs, T, MODEL_DIR=''):
             seed=args.seed, gamma=args.gamma, 
             ac_kwargs=dict(hidden_sizes=[args.hid]*args.l),
             logger_kwargs=logger_kwargs)
-        sac.soft_actor_critic(epochs=args.episodes, initial_state=initial_state) # TODO: start learning from initial state to add gradient
+        # TODO: start learning from initial state to add gradient?
+        sac.soft_actor_critic(epochs=args.episodes, initial_state=initial_state) 
         policies.append(sac) # TODO: save to file
 
         p, _ = sac.test_agent(T, deterministic=False, store_log=False, n=10) # TODO: initial state seed?
@@ -281,11 +280,9 @@ def collect_entropy_policies(env, epochs, T, MODEL_DIR=''):
         reward_fn = grad_ent(average_p) # grad_ent(average_p)
         
         # print("----------- Testing Model Averaging -----------")
-        
         # average models?
         # p_average = run_average_model(policies, T) # ADDED!!!!!
         # reward_fn = grad_ent(p_average)
-
         # print("---------------------")
         
         col_headers = ["", "baseline", "maxEnt"]
@@ -298,8 +295,7 @@ def collect_entropy_policies(env, epochs, T, MODEL_DIR=''):
         # NOTE: the full_dim can only be over 2 dimensions (set start/stop in ant_utils)
         plotting.heatmap(running_avg_p_full_dim, average_p_full_dim, i)
 
-#     indexes = [0, 5, 10, 20]
-    indexes = [0,0,0,0]
+    indexes = [0, 2, 5, 10]
     plotting.heatmap4(running_avg_ps_full_dim, running_avg_ps_baseline_full_dim, indexes)
     return policies
 
@@ -315,7 +311,7 @@ def main():
     
     TIME = datetime.now().strftime('%Y_%m_%d-%H-%M')
     plotting.FIG_DIR = 'figs/' + args.env + '/'
-    plotting.model_time = 'models_' + TIME + '/'
+    plotting.model_time = args.exp_name
     if not os.path.exists(plotting.FIG_DIR+plotting.model_time):
         os.makedirs(plotting.FIG_DIR+plotting.model_time)
 

@@ -14,6 +14,7 @@ import matplotlib.mlab as mlab
 from mpl_toolkits.mplot3d import Axes3D
 
 import utils
+import ant_utils
 args = utils.get_args()
 
 # By default, the plotter saves figures to the directory where it's executed.
@@ -138,15 +139,23 @@ def heatmap(running_avg_p, avg_p, i):
     # Create running average heatmap.
     plt.figure()
     min_value = np.min(np.ma.log(running_avg_p))
+    print(running_avg_p)
     plt.imshow(np.ma.log(running_avg_p).filled(min_value), interpolation='spline16', cmap='Blues')
 
     plt.xticks([], [])
     plt.yticks([], [])
+    
     plt.xlabel("v")
+    if (args.env == "Ant-v2"):
+        plt.xlabel(ant_utils.dim_dict[ant_utils.start])
+        
     if (args.env == "MountainCarContinuous-v0"):
         plt.ylabel("x")
-    else:
+    elif (args.env == "Pendulum-v0"):
         plt.ylabel(r"$\Theta$")
+    elif (args.env == "Ant-v2"):
+        plt.ylabel(ant_utils.dim_dict[ant_utils.start+1])
+        
     # plt.title("Policy distribution at step %d" % i)
     running_avg_heatmap_dir = FIG_DIR + model_time + '/' + 'running_avg' + '/'
     if not os.path.exists(running_avg_heatmap_dir):
@@ -157,15 +166,21 @@ def heatmap(running_avg_p, avg_p, i):
     # Create episode heatmap.
     plt.figure()
     min_value = np.min(np.ma.log(avg_p))
+    print(avg_p)
     plt.imshow(np.ma.log(avg_p).filled(min_value), interpolation='spline16', cmap='Blues')
 
     plt.xticks([], [])
     plt.yticks([], [])
     plt.xlabel("v")
+    if (args.env == "Ant-v2"):
+        plt.xlabel(ant_utils.dim_dict[ant_utils.start])
+        
     if (args.env == "MountainCarContinuous-v0"):
         plt.ylabel("x")
-    else:
+    elif (args.env == "Pendulum-v0"):
         plt.ylabel(r"$\Theta$")
+    elif (aargs.env == "Ant-v2"):
+        plt.ylabel(ant_utils.dim_dict[ant_utils.start+1])
 
     # plt.title("Policy distribution at step %d" % i)
     avg_heatmap_dir = FIG_DIR + model_time + '/' + 'avg' + '/'
@@ -199,7 +214,7 @@ def heatmap4(running_avg_ps, running_avg_ps_baseline, indexes=[0,1,2,3]):
         ax.yaxis.set_ticks([])
 
     plt.tight_layout()
-    fname = get_next_file(FIG_DIR, model_time, "time_heatmaps", ".png")
+    fname = get_next_file(FIG_DIR, model_time+'/', "time_heatmaps", ".png")
     plt.savefig(fname)
     # plt.colorbar()
     # plt.show()
