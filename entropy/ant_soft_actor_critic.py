@@ -216,6 +216,8 @@ class AntSoftActorCritic:
     def test_agent_random(self, T, n=10):
         # global sess, mu, pi, q1, q2, q1_pi, q2_pi
         p = np.zeros(shape=(tuple(ant_utils.num_states)))
+        p_full_dim = np.zeros(shape=(tuple(ant_utils.num_states_full)))
+
         denom = 0
 
         for j in range(n):
@@ -227,11 +229,14 @@ class AntSoftActorCritic:
                 r = self.reward(self.test_env, r, o)
 
                 p[tuple(ant_utils.discretize_state(get_state(self.test_env, o)))] += 1
+                tup_full = tuple(ant_utils.discretize_state_full(get_state(self.test_env, o)))
+                p_full_dim[tup_full] += 1
+                
                 ep_ret += r
                 ep_len += 1
                 denom += 1
                 
-        return p / float(denom)
+        return p / float(denom), p_full_dim / float(denom)
 
     def soft_actor_critic(self, initial_state=[], steps_per_epoch=5000, epochs=100,
             batch_size=100, start_steps=10000, save_freq=1):

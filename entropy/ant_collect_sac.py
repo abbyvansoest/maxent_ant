@@ -40,23 +40,13 @@ def get_state(env, obs):
 
 def print_dimensions(full_dim):
     print(full_dim.shape)
-    print(full_dim[0].shape)    
+    print(full_dim)
     
-    x = np.sum(full_dim, axis=0)
-    y = np.sum(full_dim, axis=1)
-    z = np.sum(full_dim, axis=2)
-    
-    x_entropy = scipy.stats.entropy(x.flatten())
-    print(x)
-    print("x_entropy = %.4f" % x_entropy)
-    
-    y_entropy = scipy.stats.entropy(y.flatten())
-    print(y)
-    print("y_entropy = %.4f" % y_entropy)
-    
-    print(z)
-    z_entropy = scipy.stats.entropy(z.flatten())
-    print("z_entropy = %.4f" % z_entropy)
+    for i in range(ant_utils.stop):
+        dim = np.sum(full_dim, axis=i)
+        dim_entropy = scipy.stats.entropy(dim.flatten())
+        print(dim)
+        print("dim_entropy[%d] = %.4f" % (i, dim_entropy))
     
 # get weight averaged model from the provided (identically formatted) tf models. 
 # can provide an arbitrary number of models.
@@ -81,9 +71,10 @@ def run_average_model(models, T):
     averaged_values = average_sess.run(average_assign)
     
     average_sac.sess = average_sess
-    _, p_averaged_full_dim = average_sac.test_agent(T, store_log=False, deterministic=False)
+    p_average, p_averaged_full_dim = average_sac.test_agent(T, store_log=False, deterministic=False)
     
     print_dimensions(p_averaged_full_dim)
+    return p_average
     
 
 # run a simulation to see how the average policy behaves.
@@ -94,6 +85,8 @@ def execute_average_policy(env, policies, T, initial_state=[], n=10, render=Fals
     random_initial_state = []
 
     denom = 0
+    
+    hi = len(policies) - 1
     
     # collect the full distribution over all states here.
     # later, slice it into each individual distribution and print.
@@ -120,17 +113,28 @@ def execute_average_policy(env, policies, T, initial_state=[], n=10, render=Fals
        
         inner_denom = 0
         for t in range(T):
+            
+            # select random policy uniform distribution
+            # take non-deterministic action for that policy
+            idx = random.randint(0, hi)
+            
+            # OR
+            # average the mu
+            # take max sigma 
+            
+            # for each of these trials, choose a random policy
 
-            action = np.zeros(shape=(1,ant_utils.action_dim))
-            for i, sac in enumerate(policies):
-                a = sac.get_action(obs, deterministic=False)
+            #action = np.zeros(shape=(1,ant_utils.action_dim))
+            #for i, sac in enumerate(policies):
+                #a = sac.get_action(obs, deterministic=False)
                 # a_det = sac.get_action(obs, deterministic=True) # question: is this returning the same value?
                 # print("non-det: %s \t det: %s" % (str(a), str(a_det)))
-                action += a
+                #action += a
                 #print("policy %d: %s" % (i, str(a_det)))
-            action /= len(policies)
+            #action /= len(policies)
             #print("final action: %s" % str(action))
             
+            action = policies[idx].get_action(obs, deterministic=False)
             obs, reward, done, _ = env.step(action)
             p[tuple(ant_utils.discretize_state(get_state(env, obs)))] += 1
             # print(tuple(ant_utils.discretize_state_full(get_state(env, obs))))
@@ -163,7 +167,7 @@ def execute_average_policy(env, policies, T, initial_state=[], n=10, render=Fals
     # Get representations of each of the 29 dimensions and save.
     print_dimensions(average_p_full_dim)
 
-    return average_p, avg_entropy, random_initial_state
+    return average_p, avg_entropy, random_initial_state, average_p_full_dim
 
 def grad_ent(pt):
     eps = .001
@@ -194,13 +198,17 @@ def collect_entropy_policies(env, epochs, T, MODEL_DIR=''):
     print(reward_fn.shape)
 
     running_avg_p = np.zeros(shape=(tuple(ant_utils.num_states)))
+    running_avg_p_full_dim = np.zeros(shape=(tuple(ant_utils.num_states_full)))
     running_avg_ent = 0
 
     running_avg_p_baseline = np.zeros(shape=(tuple(ant_utils.num_states)))
+    running_avg_p_baseline_full_dim = np.zeros(shape=(tuple(ant_utils.num_states_full)))
     running_avg_ent_baseline = 0
 
     baseline_entropies = []
     baseline_ps = []
+    baseline_ps_full_dim = []
+    
     entropies = []
     ps = []
 
@@ -209,9 +217,11 @@ def collect_entropy_policies(env, epochs, T, MODEL_DIR=''):
 
     running_avg_entropies = []
     running_avg_ps = []
+    running_avg_ps_full_dim = []
 
     running_avg_entropies_baseline = []
     running_avg_ps_baseline = []
+    running_avg_ps_baseline_full_dim = []
 
     policies = []
     initial_state = init_state(env)
@@ -230,13 +240,13 @@ def collect_entropy_policies(env, epochs, T, MODEL_DIR=''):
         sac.soft_actor_critic(epochs=args.episodes, initial_state=initial_state) # TODO: start learning from initial state to add gradient
         policies.append(sac) # TODO: save to file
 
-        p, _ = sac.test_agent(T, deterministic=False, n=10) # TODO: initial state seed?
+        p, _ = sac.test_agent(T, deterministic=False, store_log=False, n=10) # TODO: initial state seed?
 
         round_entropy = scipy.stats.entropy(p.flatten())
         entropies.append(round_entropy)
         ps.append(p)
 
-        p_baseline = sac.test_agent_random(T, n=10)
+        p_baseline, p_baseline_full = sac.test_agent_random(T, n=10)
         round_entropy_baseline = scipy.stats.entropy(p_baseline.flatten())
 
         baseline_entropies.append(round_entropy_baseline)
@@ -244,7 +254,7 @@ def collect_entropy_policies(env, epochs, T, MODEL_DIR=''):
 
         # Execute the cumulative average policy thus far.
         # Estimate distribution and entropy.
-        average_p, round_avg_ent, initial_state = \
+        average_p, round_avg_ent, initial_state, average_p_full_dim = \
             execute_average_policy(env, policies, T, render=False)
 
         average_ps.append(average_p)
@@ -252,18 +262,29 @@ def collect_entropy_policies(env, epochs, T, MODEL_DIR=''):
 
         running_avg_ent = running_avg_ent * (i)/float(i+1) + round_avg_ent/float(i+1)
         running_avg_p = running_avg_p * (i)/float(i+1) + average_p/float(i+1)
+        running_avg_p_full_dim = running_avg_p_full_dim * (i)/float(i+1) + average_p_full_dim/float(i+1)
+        
         running_avg_entropies.append(running_avg_ent)
-        running_avg_ps.append(running_avg_p)     
+        running_avg_ps.append(running_avg_p) 
+        running_avg_ps_full_dim.append(running_avg_p_full_dim) 
 
         # Update baseline running averages.
         running_avg_ent_baseline = running_avg_ent_baseline * (i)/float(i+1) + round_entropy_baseline/float(i+1)
         running_avg_p_baseline = running_avg_p_baseline * (i)/float(i+1) + p_baseline/float(i+1)
+        running_avg_p_baseline_full_dim = running_avg_p_baseline_full_dim * (i)/float(i+1) + p_baseline_full/float(i+1)
+        
         running_avg_entropies_baseline.append(running_avg_ent_baseline)
         running_avg_ps_baseline.append(running_avg_p_baseline) 
+        running_avg_ps_baseline_full_dim.append(running_avg_p_baseline_full_dim) 
         
         # update reward function
-        old_reward_fn = reward_fn
-        reward_fn = grad_ent(running_avg_p) # grad_ent(average_p)
+        reward_fn = grad_ent(average_p) # grad_ent(average_p)
+        
+        # print("----------- Testing Model Averaging -----------")
+        
+        # average models?
+        # p_average = run_average_model(policies, T) # ADDED!!!!!
+        # reward_fn = grad_ent(p_average)
 
         # print("---------------------")
         
@@ -273,12 +294,13 @@ def collect_entropy_policies(env, epochs, T, MODEL_DIR=''):
         col3 = [round_entropy, round_avg_ent, running_avg_ent, scipy.stats.entropy(running_avg_p.flatten())]
         table = tabulate(np.transpose([col1, col2, col3]), col_headers, tablefmt="fancy_grid", floatfmt=".4f")
         print(table)
-
-        print("----------- Testing Model Averaging -----------")
         
-        # average models?
-        run_average_model(policies, T) # ADDED!!!!!
+        # NOTE: the full_dim can only be over 2 dimensions (set start/stop in ant_utils)
+        plotting.heatmap(running_avg_p_full_dim, average_p_full_dim, i)
 
+#     indexes = [0, 5, 10, 20]
+    indexes = [0,0,0,0]
+    plotting.heatmap4(running_avg_ps_full_dim, running_avg_ps_baseline_full_dim, indexes)
     return policies
 
 def main():
@@ -290,6 +312,12 @@ def main():
     env = gym.make(args.env)
     env.seed(int(time.time())) # seed environment
     prng.seed(int(time.time())) # seed action space
+    
+    TIME = datetime.now().strftime('%Y_%m_%d-%H-%M')
+    plotting.FIG_DIR = 'figs/' + args.env + '/'
+    plotting.model_time = 'models_' + TIME + '/'
+    if not os.path.exists(plotting.FIG_DIR+plotting.model_time):
+        os.makedirs(plotting.FIG_DIR+plotting.model_time)
 
     policies = collect_entropy_policies(env, args.epochs, args.T)
 
