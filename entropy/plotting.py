@@ -179,7 +179,7 @@ def heatmap(running_avg_p, avg_p, i):
         plt.ylabel("x")
     elif (args.env == "Pendulum-v0"):
         plt.ylabel(r"$\Theta$")
-    elif (aargs.env == "Ant-v2"):
+    elif (args.env == "Ant-v2"):
         plt.ylabel(ant_utils.dim_dict[ant_utils.start+1])
 
     # plt.title("Policy distribution at step %d" % i)
