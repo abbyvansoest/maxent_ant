@@ -1,7 +1,3 @@
-
-
-
-
 # self.sim.data.qpos are the positions, with the first 7 element the 
 # 3D position (x,y,z) and orientation (quaternion x,y,z,w) of the torso, 
 # and the remaining 8 positions are the joint angles.
@@ -79,17 +75,30 @@ features = [2,7,8,9,10]
 min_bin = -1 # THIS CRITICAL
 max_bin = 1
 height_bins = 20
-num_bins = 20
+num_bins = 10
 
 start = 0
 stop = 2
+
+special = [0,1]
+min_x, min_y = -10, -10
+max_x, max_y = 10, 10
+x_bins, y_bins = 20, 20
 
 min_bin_full = -10
 max_bin_full = 10
 num_bins_full = 20
 
 reduce_dim = args.reduce_dim
-G = np.transpose(np.random.normal(0, 1, (state_dim, reduce_dim)))
+expected_state_dim = len(special) + reduce_dim
+G = np.transpose(np.random.normal(0, 1, (state_dim - len(special), reduce_dim)))
+
+def convert_obs(observation):
+    new_obs = []
+    for i in special:
+        new_obs.append(observation[i])
+    new_obs = np.concatenate((new_obs, np.dot(G, observation[2:])))
+    return new_obs 
 
 def discretize_range(lower_bound, upper_bound, num_bins):
     return np.linspace(lower_bound, upper_bound, num_bins + 1)[1:-1]
@@ -113,6 +122,9 @@ def get_state_bins():
 
 def get_state_bins_reduced():
     state_bins = []
+    state_bins.append(discretize_range(min_x, max_x, x_bins))
+    state_bins.append(discretize_range(min_y, max_y, y_bins))
+    
     for i in range(reduce_dim):
         state_bins.append(discretize_range(min_bin, max_bin, num_bins))
     return state_bins
@@ -157,9 +169,9 @@ def discretize_state_normal(observation):
 # Discretize the observation features and reduce them to a single list.
 def discretize_state_reduced(observation, norm=[]):
     
-    if (len(observation) != reduce_dim):
-        observation = np.dot(G, observation)
-    
+    if (len(observation) != expected_state_dim):
+        observation = convert_obs(observation)
+
     if len(norm) > 0:
         for i in range(len(observation)):
             observation[i] = observation[i] / norm[i]

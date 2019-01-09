@@ -32,8 +32,6 @@ args = utils.get_args()
 
 from spinup.utils.run_utils import setup_logger_kwargs
 
-# f = open(args.models_dir,'w'); sys.stdout = f
-
 def get_state(env, obs):
     state = env.env.state_vector()
     return state
@@ -94,6 +92,9 @@ def execute_average_policy(env, policies, T, initial_state=[], n=10, render=Fals
             obs, reward, done, _ = env.step(action)
             p[tuple(ant_utils.discretize_state(get_state(env, obs)))] += 1
             p_full_dim[tuple(ant_utils.discretize_state_full(get_state(env, obs)))] += 1
+            
+#             print(obs)
+#             print(tuple(ant_utils.discretize_state(get_state(env, obs))))
             
             buffer.store(get_state(env, obs))
             

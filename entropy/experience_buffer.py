@@ -15,14 +15,20 @@ class ExperienceBuffer:
         if self.normalized:
             raise ValueError("ERROR! Do not store in buffer after normalizing.")
         # TODO: check dimension of obs: should be dimension of ant env.env.state_vector()
-        state = np.dot(ant_utils.G, state)
-        self.buffer.append(state)
+#         state = np.dot(ant_utils.G, state)
+        self.buffer.append(ant_utils.convert_obs(state))
     
     def normalize(self):
         # for each index in reduced dimension,
         # find the largest value in self.buffer
         # divide all elements at that index 
-        for i in range(ant_utils.reduce_dim):
+        for i in range(ant_utils.expected_state_dim):
+            
+            # Do not normalize special values
+            if i in ant_utils.special:
+                self.normalization_factors.append(1.0)
+                continue
+            
             i_vals = [x[i] for x in self.buffer]
             max_i_val = max(i_vals)
             self.normalization_factors.append(max_i_val)

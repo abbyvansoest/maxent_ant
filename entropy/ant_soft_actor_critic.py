@@ -11,11 +11,8 @@ from spinup.utils.logx import EpochLogger
 import ant_utils
 from experience_buffer import ExperienceBuffer
 
-def get_state(env, obs, printme=False):
+def get_state(env, obs):
     state = env.env.state_vector()
-    if printme:
-        print("o = " + str(obs[:29]))
-        print("state = " + str(state))
     return state
 
 class ReplayBuffer:
@@ -147,7 +144,7 @@ class AntSoftActorCritic:
             self.sess.run(target_init)
 
 
-    def reward(self, env, r, o, printme=False):
+    def reward(self, env, r, o):
         if len(self.reward_fn) == 0:
             return r
     
