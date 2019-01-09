@@ -186,7 +186,8 @@ def collect_entropy_policies(env, epochs, T, MODEL_DIR=''):
 
         print("*** EPOCH: " + str(i))
 
-        logger_kwargs = setup_logger_kwargs(args.exp_name+ "/model" + str(i), args.seed, data_dir='/home/abby/entropy/data')
+        direct = os.getcwd()+ '/data'
+        logger_kwargs = setup_logger_kwargs(args.exp_name+ "/model" + str(i), args.seed, data_dir=direct)
 
         # Learn policy that maximizes current reward function.
         sac = AntSoftActorCritic(lambda : gym.make(args.env), reward_fn=reward_fn, xid=i+1,
