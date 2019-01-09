@@ -1,3 +1,7 @@
+
+
+
+
 # self.sim.data.qpos are the positions, with the first 7 element the 
 # 3D position (x,y,z) and orientation (quaternion x,y,z,w) of the torso, 
 # and the remaining 8 positions are the joint angles.
@@ -25,15 +29,17 @@ import gym
 import time
 import numpy as np
 
+from experience_buffer import ExperienceBuffer
 import utils
 args = utils.get_args()
 
 env = gym.make('Ant-v2')
+buffer = ExperienceBuffer()
 
 dim_dict = {
     0:"x",
     1:"y",
-    2:"z",
+    2:"z",      # have as special coordinates that you do not project. bin at appropriate value for these coordinates
     3:"x torso",
     4:"y torso",
     5:"z torso",
@@ -70,13 +76,13 @@ state_dim = int(env.env.state_vector().shape[0])
 action_dim = int(env.action_space.sample().shape[0])
 
 features = [2,7,8,9,10]
-min_bin = -3
-max_bin = 3
+min_bin = -1 # THIS CRITICAL
+max_bin = 1
 height_bins = 20
 num_bins = 20
 
-start = 3
-stop = 5
+start = 0
+stop = 2
 num_bins_full = 10
 
 reduce_dim = args.reduce_dim
@@ -148,9 +154,10 @@ def discretize_state_normal(observation):
 
 # Discretize the observation features and reduce them to a single list.
 def discretize_state_reduced(observation):
-    # print(observation)
-    observation = np.dot(G, observation)
-    # print(observation)
+    
+    if (len(observation) != reduce_dim):
+        observation = np.dot(G, observation)
+
     state = []
     for i, feature in enumerate(observation):
         state.append(discretize_value(feature, state_bins[i]))

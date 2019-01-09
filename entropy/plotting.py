@@ -135,11 +135,30 @@ def smear_dots(running_avg_ps):
     fname = get_next_file(FIG_DIR, model_time, "running_avg_xv_distrs_smear_dot", ".png")
     plt.savefig(fname)
 
+def heatmap1(avg_p, i):
+    # Create running average heatmap.
+    plt.figure()
+    min_value = np.min(np.ma.log(avg_p))
+    plt.imshow(np.ma.log(avg_p).filled(min_value), interpolation='spline16', cmap='Oranges')
+
+    plt.xticks([], [])
+    plt.yticks([], [])
+            
+    if (args.env == "Ant-v2"):
+        plt.xlabel(ant_utils.dim_dict[ant_utils.start])
+        plt.ylabel(ant_utils.dim_dict[ant_utils.start+1])
+        
+    baseline_heatmap_dir = FIG_DIR + model_time + '/' + 'baseline' + '/'
+    if not os.path.exists(baseline_heatmap_dir):
+        os.makedirs(baseline_heatmap_dir)
+    fname = baseline_heatmap_dir + "heatmap_%02d.png" % i
+    plt.savefig(fname)
+
 def heatmap(running_avg_p, avg_p, i):
     # Create running average heatmap.
     plt.figure()
     min_value = np.min(np.ma.log(running_avg_p))
-    print(running_avg_p)
+    #print(running_avg_p)
     plt.imshow(np.ma.log(running_avg_p).filled(min_value), interpolation='spline16', cmap='Blues')
 
     plt.xticks([], [])
@@ -166,7 +185,7 @@ def heatmap(running_avg_p, avg_p, i):
     # Create episode heatmap.
     plt.figure()
     min_value = np.min(np.ma.log(avg_p))
-    print(avg_p)
+    #print(avg_p)
     plt.imshow(np.ma.log(avg_p).filled(min_value), interpolation='spline16', cmap='Blues')
 
     plt.xticks([], [])
