@@ -83,7 +83,10 @@ num_bins = 20
 
 start = 0
 stop = 2
-num_bins_full = 10
+
+min_bin_full = -10
+max_bin_full = 10
+num_bins_full = 20
 
 reduce_dim = args.reduce_dim
 G = np.transpose(np.random.normal(0, 1, (state_dim, reduce_dim)))
@@ -117,7 +120,7 @@ def get_state_bins_reduced():
 def get_state_bins_full_state():
     state_bins = []
     for i in range(start, stop):
-        state_bins.append(discretize_range(-3, 3, num_bins_full))
+        state_bins.append(discretize_range(min_bin_full, max_bin_full, num_bins_full))
     return state_bins
 
 
@@ -138,13 +141,12 @@ state_bins_full = get_state_bins_full_state()
 num_states_full = tuple([num_bins_full for i in range(start, stop)])
 
 # Discretize the observation features and reduce them to a single list.
-def discretize_state_full(observation):
+def discretize_state_full(observation, norm=[]):
     state = []
     for i in range(start, stop):
         feature = observation[i]
         state.append(discretize_value(feature, state_bins_full[i - start]))
     return state
-# Goal: discretize the state 
 
 def discretize_state_normal(observation):
     state = []
@@ -153,10 +155,14 @@ def discretize_state_normal(observation):
     return state
 
 # Discretize the observation features and reduce them to a single list.
-def discretize_state_reduced(observation):
+def discretize_state_reduced(observation, norm=[]):
     
     if (len(observation) != reduce_dim):
         observation = np.dot(G, observation)
+    
+    if len(norm) > 0:
+        for i in range(len(observation)):
+            observation[i] = observation[i] / norm[i]
 
     state = []
     for i, feature in enumerate(observation):
@@ -164,9 +170,9 @@ def discretize_state_reduced(observation):
     return state
 
 # Discretize the observation features and reduce them to a single list.
-def discretize_state(observation):
+def discretize_state(observation, norm=[]):
     if args.gaussian:
-        state = discretize_state_reduced(observation)
+        state = discretize_state_reduced(observation, norm)
     else:
         state = discretize_state_normal(observation)
 

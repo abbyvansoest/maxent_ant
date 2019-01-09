@@ -18,12 +18,11 @@ import gym
 from gym.spaces import prng
 import tensorflow as tf
 
-from ant_soft_actor_critic import AntSoftActorCritic
-from experience_buffer import ExperienceBuffer
-
 import utils
 import ant_utils
 import plotting
+from ant_soft_actor_critic import AntSoftActorCritic
+from experience_buffer import ExperienceBuffer
 
 import torch
 from torch.distributions import Normal
@@ -119,17 +118,12 @@ def execute_average_policy(env, policies, T, initial_state=[], n=10, render=Fals
     average_p_full_dim /= float(denom)
     avg_entropy /= float(n) # running average of the entropy 
     entropy_of_final = scipy.stats.entropy(average_p.flatten())
-
-    print_dimensions(average_p_full_dim)
     
-    # TODO: replace
-    # average_p --> buff_p_test, etc.
     buff_p = buffer.get_discrete_distribution()
     buff_p_test_full = buffer.get_discrete_distribution_full()
-    print_dimensions(buff_p_test_full)
 
 #     return average_p, avg_entropy, random_initial_state, average_p_full_dim
-    return buff_p, scipy.stats.entropy(buff_p.flatten()), random_initial_state, buff_p_test_full
+    return buff_p, scipy.stats.entropy(buff_p.flatten()), random_initial_state, buff_p_test_full, buffer.normalization_factors
 
 def grad_ent(pt):
     eps = .001
@@ -184,6 +178,7 @@ def collect_entropy_policies(env, epochs, T, MODEL_DIR=''):
     running_avg_ps_baseline_full_dim = []
 
     policies = []
+    normalization_factors = []
     initial_state = init_state(env)
 
     for i in range(epochs):
@@ -196,10 +191,13 @@ def collect_entropy_policies(env, epochs, T, MODEL_DIR=''):
         sac = AntSoftActorCritic(lambda : gym.make(args.env), reward_fn=reward_fn, xid=i+1,
             seed=args.seed, gamma=args.gamma, 
             ac_kwargs=dict(hidden_sizes=[args.hid]*args.l),
-            logger_kwargs=logger_kwargs)
+            logger_kwargs=logger_kwargs, normalization_factors=normalization_factors)
         # TODO: start learning from initial state to add gradient?
         sac.soft_actor_critic(epochs=args.episodes, initial_state=initial_state) 
         policies.append(sac) # TODO: save to file
+        
+        # BUG/TODO: provide normalization factors to test_agent, execute_average_policy
+        # to synchronize the normalization on each round.
 
         p, _ = sac.test_agent(T, deterministic=False, store_log=False, n=10) # TODO: initial state seed?
 
@@ -215,8 +213,11 @@ def collect_entropy_policies(env, epochs, T, MODEL_DIR=''):
 
         # Execute the cumulative average policy thus far.
         # Estimate distribution and entropy.
-        average_p, round_avg_ent, initial_state, average_p_full_dim = \
+        average_p, round_avg_ent, initial_state, average_p_full_dim, normalization_factors = \
             execute_average_policy(env, policies, T, render=False)
+        
+        print(average_p_full_dim)
+        print(p_baseline_full)
 
         average_ps.append(average_p)
         average_entropies.append(round_avg_ent) 
@@ -239,7 +240,7 @@ def collect_entropy_policies(env, epochs, T, MODEL_DIR=''):
         running_avg_ps_baseline_full_dim.append(running_avg_p_baseline_full_dim) 
         
         # update reward function
-        reward_fn = grad_ent(average_p) # grad_ent(average_p)
+        reward_fn = grad_ent(average_p)
         
         col_headers = ["", "baseline", "maxEnt"]
         col1 = ["round_entropy", "round_mixed_ent", "running_avg_ent", "entropy_of_running_p"]

@@ -23,52 +23,30 @@ class ReplayBuffer:
     A simple FIFO experience replay buffer for SAC agents.
     """
 
-    def __init__(self, obs_dim, act_dim, size, reward_fn, state_dim=29):
+    def __init__(self, obs_dim, act_dim, size):
         self.obs1_buf = np.zeros([size, obs_dim], dtype=np.float32)
         self.obs2_buf = np.zeros([size, obs_dim], dtype=np.float32)
         self.acts_buf = np.zeros([size, act_dim], dtype=np.float32)
         self.rews_buf = np.zeros(size, dtype=np.float32)
-        self.done_buf = np.zeros(size, dtype=np.float32)
-        self.state_buf = np.zeros([size, state_dim], dtype=np.float32)
-        
-        self.ptr, self.size, self.max_size, self.state_dim = 0, 0, size, state_dim
-        self.reward_fn = reward_fn
+        self.done_buf = np.zeros(size, dtype=np.float32)        
+        self.ptr, self.size, self.max_size = 0, 0, size
 
-    def store(self, obs, act, rew, next_obs, done, state):
+    def store(self, obs, act, rew, next_obs, done):
         self.obs1_buf[self.ptr] = obs
         self.obs2_buf[self.ptr] = next_obs
         self.acts_buf[self.ptr] = act
         self.rews_buf[self.ptr] = rew
         self.done_buf[self.ptr] = done
-        self.state_buf[self.ptr] = state
         
         self.ptr = (self.ptr+1) % self.max_size
         self.size = min(self.size+1, self.max_size)
         
-    # TODO: recompute rewards here. based on normalized obs2
-
     def sample_batch(self, batch_size=32):
-        # TODO: first, recompute rewards with normalized vectors.
         idxs = np.random.randint(0, self.size, size=batch_size)
-        
-        # normalize
-        buffer = ExperienceBuffer()
-        norm_idxs = np.concatenate((idxs, np.random.randint(0, self.size, size=900)))
-        for idx in norm_idxs:
-            buffer.store(self.state_buf[idx])
-            
-        normalized = buffer.normalize()
-        normalized = np.array(normalized[:batch_size])
-        
-        # get new rewards
-        rewards = np.zeros(batch_size, dtype=np.float32)
-        for i in range(len(normalized)):
-            rewards[i] = self.reward_fn[tuple(ant_utils.discretize_state(normalized[i]))]
-            
         return dict(obs1=self.obs1_buf[idxs],
                     obs2=self.obs2_buf[idxs],
                     acts=self.acts_buf[idxs],
-                    rews=rewards,
+                    rews=self.rews_buf[idxs],
                     done=self.done_buf[idxs])
 
 """
@@ -96,6 +74,7 @@ class AntSoftActorCritic:
 
         self.max_ep_len = max_ep_len
         self.reward_fn = reward_fn
+        self.normalization_factors = normalization_factors
         self.env, self.test_env = env_fn(), env_fn()
         self.obs_dim = self.env.observation_space.shape[0]
         self.act_dim = self.env.action_space.shape[0]
@@ -121,7 +100,7 @@ class AntSoftActorCritic:
                 _, _, _, _, _, _, _, self.v_targ  = actor_critic(self.x2_ph, self.a_ph, **ac_kwargs)
 
             # Experience buffer
-            self.replay_buffer = ReplayBuffer(obs_dim=self.obs_dim, act_dim=self.act_dim, size=replay_size, reward_fn=reward_fn)
+            self.replay_buffer = ReplayBuffer(obs_dim=self.obs_dim, act_dim=self.act_dim, size=replay_size)
 
             # Min Double-Q:
             min_q_pi = tf.minimum(self.q1_pi, self.q2_pi)
@@ -171,15 +150,9 @@ class AntSoftActorCritic:
     def reward(self, env, r, o, printme=False):
         if len(self.reward_fn) == 0:
             return r
-
-        tup = tuple(ant_utils.discretize_state(get_state(env, o)))
-        
-        if printme:
-            #print("o[0] = " + str(o[0]))
-            print("reward tup = " + str(tup) + "\treward = " + str(self.reward_fn[tup]))
-
-        # if printme:
-        #     print("orig: %f \t replace: %f" % (r, new_reward))
+    
+        # use self.normalization_factors to normalize the state.
+        tup = tuple(ant_utils.discretize_state(get_state(env, o), self.normalization_factors))
 
         return self.reward_fn[tup]
 
@@ -193,7 +166,10 @@ class AntSoftActorCritic:
 
     def test_agent(self, T, n=10, initial_state=[], sess=None, store_log=True, deterministic=True):
         
-        buffer = ExperienceBuffer()
+        p = np.zeros(shape=(tuple(ant_utils.num_states)))
+        p_full_dim = np.zeros(shape=(tuple(ant_utils.num_states_full)))
+        
+        #buffer = ExperienceBuffer()
         denom = 0
 
         for j in range(n):
@@ -211,7 +187,12 @@ class AntSoftActorCritic:
                 o, r, d, _ = self.test_env.step(a)
                 
                 # HERE: collect experience into a buffer
-                buffer.store(get_state(self.test_env, o))
+                #buffer.store(get_state(self.test_env, o))
+                
+                tup = tuple(ant_utils.discretize_state(get_state(self.test_env, o), self.normalization_factors))
+                p[tup] += 1
+                tup_full = tuple(ant_utils.discretize_state_full(get_state(self.test_env, o), self.normalization_factors))
+                p_full_dim[tup_full] += 1
                 
                 r = self.reward(self.test_env, r, o)
                 ep_ret += r
@@ -223,14 +204,19 @@ class AntSoftActorCritic:
         
         # HERE: normalize all experience/obs vectors before returning p.
         
-        p = buffer.get_discrete_distribution()
-        p_full_dim = buffer.get_discrete_distribution_full()
+#         p = buffer.get_discrete_distribution()
+#         p_full_dim = buffer.get_discrete_distribution_full()
+        p /= float(denom)
+        p_full_dim /= float(denom)
         
         return p, p_full_dim
 
     def test_agent_random(self, T, n=10):
+        
+        p = np.zeros(shape=(tuple(ant_utils.num_states)))
+        p_full_dim = np.zeros(shape=(tuple(ant_utils.num_states_full)))
 
-        buffer = ExperienceBuffer()
+#         buffer = ExperienceBuffer()
         denom = 0
 
         for j in range(n):
@@ -239,11 +225,20 @@ class AntSoftActorCritic:
                 a = self.test_env.action_space.sample()
                 o, r, d, _ = self.test_env.step(a)
                 r = self.reward(self.test_env, r, o)
-                buffer.store(get_state(self.test_env, o))
+                #buffer.store(get_state(self.test_env, o))
+                
+                tup = tuple(ant_utils.discretize_state(get_state(self.test_env, o), self.normalization_factors))
+                p[tup] += 1
+                tup_full = tuple(ant_utils.discretize_state_full(get_state(self.test_env, o), self.normalization_factors))
+                p_full_dim[tup_full] += 1
+                
                 denom += 1
                 
-        p = buffer.get_discrete_distribution()
-        p_full_dim = buffer.get_discrete_distribution_full()
+#         p = buffer.get_discrete_distribution()
+#         p_full_dim = buffer.get_discrete_distribution_full()
+        
+        p /= float(denom)
+        p_full_dim /= float(denom)
         
         return p, p_full_dim
 
@@ -298,8 +293,7 @@ class AntSoftActorCritic:
                 d = False if ep_len == self.max_ep_len else d
 
                 # Store experience to replay buffer
-                # TODO: update rewards with normalization!!!!!
-                self.replay_buffer.store(o, a, r, o2, d, get_state(self.env, o2))
+                self.replay_buffer.store(o, a, r, o2, d)
 
                 # Super critical: update most recent observation.
                 o = o2
