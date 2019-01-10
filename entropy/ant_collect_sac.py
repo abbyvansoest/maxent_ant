@@ -80,15 +80,30 @@ def execute_average_policy(env, policies, T, initial_state=[], n=10, render=Fals
         inner_denom = 0
         for t in range(T):
             
-            # select random policy uniform distribution
-            # take non-deterministic action for that policy
-            idx = random.randint(0, max_idx)
+            action = np.zeros(shape=(1,ant_utils.action_dim))
             
-            # OR
             # average the mu
             # take max sigma 
+            if args.max_sigma:
+                mu = np.zeros(shape=(1,ant_utils.action_dim))
+                sigma = np.zeros(shape=(1,ant_utils.action_dim))
+                for sac in policies:
+                    mu += sac.get_action(obs, deterministic=True)
+                    sigma = np.maximum(sigma, sac.get_sigma(obs))
+                mu /= len(policies)
+
+                action = np.random.normal(loc=mu, scale=sigma)
+
+                # dist = tfd.Normal(loc=mu, scale=sigma)
+                # sess = tf.Session()
+                # with sess.as_default():
+                #     action = dist.sample([1]).eval().reshape(8)
+            else:
+                # select random policy uniform distribution
+                # take non-deterministic action for that policy
+                idx = random.randint(0, max_idx)
+                action = policies[idx].get_action(obs, deterministic=False)
             
-            action = policies[idx].get_action(obs, deterministic=False)
             obs, reward, done, _ = env.step(action)
             p[tuple(ant_utils.discretize_state(get_state(env, obs)))] += 1
             p_full_dim[tuple(ant_utils.discretize_state_full(get_state(env, obs)))] += 1
@@ -197,9 +212,6 @@ def collect_entropy_policies(env, epochs, T, MODEL_DIR=''):
         # TODO: start learning from initial state to add gradient?
         sac.soft_actor_critic(epochs=args.episodes, initial_state=initial_state) 
         policies.append(sac) # TODO: save to file
-        
-        # BUG/TODO: provide normalization factors to test_agent, execute_average_policy
-        # to synchronize the normalization on each round.
 
         p, _ = sac.test_agent(T, deterministic=False, store_log=False, n=10) # TODO: initial state seed?
 
@@ -246,7 +258,8 @@ def collect_entropy_policies(env, epochs, T, MODEL_DIR=''):
         
         col_headers = ["", "baseline", "maxEnt"]
         col1 = ["round_entropy", "round_mixed_ent", "running_avg_ent", "entropy_of_running_p"]
-        col2 = [round_entropy_baseline, "", running_avg_ent_baseline, scipy.stats.entropy(running_avg_p_baseline.flatten())]
+        ent = scipy.stats.entropy(running_avg_p_baseline.flatten())
+        col2 = [round_entropy_baseline, "", running_avg_ent_baseline, ent]
         col3 = [round_entropy, round_avg_ent, running_avg_ent, scipy.stats.entropy(running_avg_p.flatten())]
         table = tabulate(np.transpose([col1, col2, col3]), col_headers, tablefmt="fancy_grid", floatfmt=".4f")
         print(table)
@@ -255,7 +268,12 @@ def collect_entropy_policies(env, epochs, T, MODEL_DIR=''):
         plotting.heatmap(running_avg_p_full_dim, average_p_full_dim, i)
         plotting.heatmap1(running_avg_p_baseline_full_dim, i)
 
-    indexes = [0, 2, 5, 10]
+#     indexes = [0, 2, 5, 10]
+    indexes = []
+    print('which indexes?')
+    for i in range(4):
+        idx = input("index :")
+        indexes.append(int(idx))
     plotting.heatmap4(running_avg_ps_full_dim, running_avg_ps_baseline_full_dim, indexes)
     return policies
 

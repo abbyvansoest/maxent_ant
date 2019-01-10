@@ -43,6 +43,8 @@ parser.add_argument('--gaussian', action='store_true',
                     help='reduce dimension with random gaussian')
 parser.add_argument('--reduce_dim', type=int, default=5, metavar='rd',
                     help='dimension reduction parameter')
+parser.add_argument('--max_sigma', action='store_true',
+                    help='use max sigma approach in policy averaging')
 
 args = parser.parse_args()
 
