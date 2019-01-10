@@ -81,9 +81,9 @@ start = 0
 stop = 2
 
 special = [0,1]
-min_x, min_y = -10, -10
-max_x, max_y = 10, 10
-x_bins, y_bins = 50, 50
+min_x, min_y = -8, -8
+max_x, max_y = 8, 8
+x_bins, y_bins = 30, 30
 
 min_bin_full = -10
 max_bin_full = 10

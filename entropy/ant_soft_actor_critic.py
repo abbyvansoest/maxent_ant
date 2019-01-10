@@ -152,7 +152,6 @@ class AntSoftActorCritic:
         
         # use self.normalization_factors to normalize the state.
         tup = tuple(ant_utils.discretize_state(get_state(env, o), self.normalization_factors))
-
         return self.reward_fn[tup]
 
     def get_action(self, o, deterministic=False, sess=None):
@@ -189,7 +188,7 @@ class AntSoftActorCritic:
                 a = self.get_action(o, deterministic, sess)
                 o, r, d, _ = self.test_env.step(a)
                 
-                # HERE: collect experience into a buffer
+                # collect experience into a buffer
                 #buffer.store(get_state(self.test_env, o))
                 
                 tup = tuple(ant_utils.discretize_state(get_state(self.test_env, o), self.normalization_factors))
@@ -204,9 +203,7 @@ class AntSoftActorCritic:
 
             if store_log:
                 self.logger.store(TestEpRet=ep_ret, TestEpLen=ep_len)
-        
-        # HERE: normalize all experience/obs vectors before returning p.
-        
+                
 #         p = buffer.get_discrete_distribution()
 #         p_full_dim = buffer.get_discrete_distribution_full()
         p /= float(denom)
@@ -214,7 +211,7 @@ class AntSoftActorCritic:
         
         return p, p_full_dim
 
-    def test_agent_random(self, T, n=10):
+    def test_agent_random(self, T, normalization_factors=[], n=10):
         
         p = np.zeros(shape=(tuple(ant_utils.num_states)))
         p_full_dim = np.zeros(shape=(tuple(ant_utils.num_states_full)))
@@ -225,14 +222,14 @@ class AntSoftActorCritic:
         for j in range(n):
             o, r, d, ep_ret, ep_len = self.test_env.reset(), 0, False, 0, 0
             while not(d or (ep_len == T)):
-                a = self.test_env.action_space.sample()
+                a = self.test_env.action_space.sample() # TODO: should I limit action space at all?
                 o, r, d, _ = self.test_env.step(a)
                 r = self.reward(self.test_env, r, o)
                 #buffer.store(get_state(self.test_env, o))
                 
-                tup = tuple(ant_utils.discretize_state(get_state(self.test_env, o), self.normalization_factors))
+                tup = tuple(ant_utils.discretize_state(get_state(self.test_env, o), normalization_factors))
                 p[tup] += 1
-                tup_full = tuple(ant_utils.discretize_state_full(get_state(self.test_env, o), self.normalization_factors))
+                tup_full = tuple(ant_utils.discretize_state_full(get_state(self.test_env, o), normalization_factors))
                 p_full_dim[tup_full] += 1
                 
                 denom += 1

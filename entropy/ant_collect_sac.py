@@ -108,9 +108,6 @@ def execute_average_policy(env, policies, T, initial_state=[], n=10, render=Fals
             p[tuple(ant_utils.discretize_state(get_state(env, obs)))] += 1
             p_full_dim[tuple(ant_utils.discretize_state_full(get_state(env, obs)))] += 1
             
-#             print(obs)
-#             print(tuple(ant_utils.discretize_state(get_state(env, obs))))
-            
             buffer.store(get_state(env, obs))
             
             denom += 1
@@ -159,13 +156,16 @@ def init_state(env):
 def collect_entropy_policies(env, epochs, T, MODEL_DIR=''):
 
     reward_fn = np.zeros(shape=(tuple(ant_utils.num_states)))
-    print(reward_fn.shape)
-
-    # set initial state to base state.
     seed = init_state(env)
-    print("seed = " + str(seed))
+    
+    # x=0, y=0 is starting seed state for all dimensions.
+    v_x = ant_utils.discretize_value(0, ant_utils.state_bins[0])
+    v_y = ant_utils.discretize_value(0, ant_utils.state_bins[1])
+    reward_fn[tuple((v_x, v_y))] = 1
+    
+    print(reward_fn.shape)
     print(tuple(ant_utils.discretize_state(seed)))
-    reward_fn[tuple(ant_utils.discretize_state(seed))] = 10
+    print(reward_fn[tuple(ant_utils.discretize_state(seed))])
 
     running_avg_p = np.zeros(shape=(tuple(ant_utils.num_states)))
     running_avg_p_full_dim = np.zeros(shape=(tuple(ant_utils.num_states_full)))
@@ -213,22 +213,24 @@ def collect_entropy_policies(env, epochs, T, MODEL_DIR=''):
         sac.soft_actor_critic(epochs=args.episodes, initial_state=initial_state) 
         policies.append(sac) # TODO: save to file
 
-        p, _ = sac.test_agent(T, deterministic=False, store_log=False, n=10) # TODO: initial state seed?
+        # CHANGED DETERMNISTIC HERE
+        # CHANGED ORDER OF BASELINE COLLECTION AND NORMALIZATION PARAMS
+        p, _ = sac.test_agent(T, deterministic=True, store_log=False, n=args.n) # TODO: initial state seed?
 
         round_entropy = scipy.stats.entropy(p.flatten())
         entropies.append(round_entropy)
         ps.append(p)
 
-        p_baseline, p_baseline_full = sac.test_agent_random(T, n=10)
+        # Execute the cumulative average policy thus far.
+        # Estimate distribution and entropy.
+        average_p, round_avg_ent, initial_state, average_p_full_dim, normalization_factors = \
+            execute_average_policy(env, policies, T, n=args.n, render=False)
+        
+        p_baseline, p_baseline_full = sac.test_agent_random(T, normalization_factors=normalization_factors, n=args.n)
         round_entropy_baseline = scipy.stats.entropy(p_baseline.flatten())
 
         baseline_entropies.append(round_entropy_baseline)
         baseline_ps.append(p_baseline)
-
-        # Execute the cumulative average policy thus far.
-        # Estimate distribution and entropy.
-        average_p, round_avg_ent, initial_state, average_p_full_dim, normalization_factors = \
-            execute_average_policy(env, policies, T, render=False)
         
         print(average_p_full_dim)
         print(p_baseline_full)
@@ -268,12 +270,7 @@ def collect_entropy_policies(env, epochs, T, MODEL_DIR=''):
         plotting.heatmap(running_avg_p_full_dim, average_p_full_dim, i)
         plotting.heatmap1(running_avg_p_baseline_full_dim, i)
 
-#     indexes = [0, 2, 5, 10]
-    indexes = []
-    print('which indexes?')
-    for i in range(4):
-        idx = input("index :")
-        indexes.append(int(idx))
+    indexes = [0, 5, 10, 25]
     plotting.heatmap4(running_avg_ps_full_dim, running_avg_ps_baseline_full_dim, indexes)
     return policies
 
