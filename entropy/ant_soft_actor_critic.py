@@ -4,8 +4,10 @@ import numpy as np
 import tensorflow as tf
 import gym
 import time
-from spinup.algos.sac import core
-from spinup.algos.sac.core import get_vars
+# from spinup.algos.sac import core
+# from spinup.algos.sac.core import get_vars
+import core
+from core import get_vars
 from spinup.utils.logx import EpochLogger
 
 import ant_utils
@@ -90,11 +92,11 @@ class AntSoftActorCritic:
             # Main outputs from computation graph
             # with tf.device('/job:localhost/replica:0/task:0/device:GPU:2'):
             with tf.variable_scope(self.main_scope):
-                self.mu, self.pi, self.logp_pi, self.q1, self.q2, self.q1_pi, self.q2_pi, self.v = actor_critic(self.x_ph, self.a_ph, **ac_kwargs)
+                self.mu, self.pi, self.logp_pi, self.q1, self.q2, self.q1_pi, self.q2_pi, self.v, self.std = actor_critic(self.x_ph, self.a_ph, **ac_kwargs)
             
             # Target value network
             with tf.variable_scope(self.target_scope):
-                _, _, _, _, _, _, _, self.v_targ  = actor_critic(self.x2_ph, self.a_ph, **ac_kwargs)
+                _, _, _, _, _, _, _, self.v_targ, _  = actor_critic(self.x2_ph, self.a_ph, **ac_kwargs)
 
             # Experience buffer
             self.replay_buffer = ReplayBuffer(obs_dim=self.obs_dim, act_dim=self.act_dim, size=replay_size)
@@ -147,7 +149,7 @@ class AntSoftActorCritic:
     def reward(self, env, r, o):
         if len(self.reward_fn) == 0:
             return r
-    
+        
         # use self.normalization_factors to normalize the state.
         tup = tuple(ant_utils.discretize_state(get_state(env, o), self.normalization_factors))
 
@@ -160,6 +162,10 @@ class AntSoftActorCritic:
                 return sess.run(act_op, feed_dict={self.x_ph: o.reshape(1,-1)})[0]
             action = self.sess.run(act_op, feed_dict={self.x_ph: o.reshape(1,-1)})[0]
             return action
+        
+    def get_sigma(self, o):
+        with self.graph.as_default():
+            return self.sess.run(self.std, feed_dict={self.x_ph: o.reshape(1,-1)})[0]
 
     def test_agent(self, T, n=10, initial_state=[], sess=None, store_log=True, deterministic=True):
         
