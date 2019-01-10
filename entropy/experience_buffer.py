@@ -15,7 +15,6 @@ class ExperienceBuffer:
         if self.normalized:
             raise ValueError("ERROR! Do not store in buffer after normalizing.")
         # TODO: check dimension of obs: should be dimension of ant env.env.state_vector()
-#         state = np.dot(ant_utils.G, state)
         self.buffer.append(ant_utils.convert_obs(state))
     
     def normalize(self):
