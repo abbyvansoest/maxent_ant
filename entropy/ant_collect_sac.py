@@ -42,7 +42,7 @@ def print_dimensions(full_dim):
     
     for i in range(ant_utils.stop - ant_utils.start):
         dim = np.sum(full_dim, axis=i)
-        dim_entropy = scipy.stats.entropy(dim.flatten())
+        dim_entropy = scipy.stats.entropy(dim.ravel())
         print(dim)
         print("dim_entropy[%d] = %.4f" % (i, dim_entropy))
 
@@ -66,8 +66,8 @@ def execute_average_policy(env, policies, T, initial_state=[], n=10, render=Fals
         env.reset()
         
         if len(initial_state) > 0:
-            qpos = initial_state[:15]
-            qvel = initial_state[15:]
+            qpos = initial_state[:len(ant_utils.qpos)]
+            qvel = initial_state[len(ant_utils.qpos):]
             env.env.set_state(qpos, qvel)
 
         obs = env.env._get_obs()
@@ -93,11 +93,6 @@ def execute_average_policy(env, policies, T, initial_state=[], n=10, render=Fals
                 mu /= len(policies)
 
                 action = np.random.normal(loc=mu, scale=sigma)
-
-                # dist = tfd.Normal(loc=mu, scale=sigma)
-                # sess = tf.Session()
-                # with sess.as_default():
-                #     action = dist.sample([1]).eval().reshape(8)
             else:
                 # select random policy uniform distribution
                 # take non-deterministic action for that policy
@@ -123,26 +118,38 @@ def execute_average_policy(env, policies, T, initial_state=[], n=10, render=Fals
 
         average_p += p
         average_p_full_dim += p_full_dim
-        avg_entropy += scipy.stats.entropy(average_p.flatten())
+        avg_entropy += scipy.stats.entropy(average_p.ravel())
 
     env.close()
 
     average_p /= float(denom)
     average_p_full_dim /= float(denom)
     avg_entropy /= float(n) # running average of the entropy 
-    entropy_of_final = scipy.stats.entropy(average_p.flatten())
+    entropy_of_final = scipy.stats.entropy(average_p.ravel())
     
     buff_p = buffer.get_discrete_distribution()
     buff_p_test_full = buffer.get_discrete_distribution_full()
 
 #     return average_p, avg_entropy, random_initial_state, average_p_full_dim
-    return buff_p, scipy.stats.entropy(buff_p.flatten()), random_initial_state, buff_p_test_full, buffer.normalization_factors
+    return buff_p, scipy.stats.entropy(buff_p.ravel()), random_initial_state, buff_p_test_full, buffer.normalization_factors
 
 def grad_ent(pt):
-    eps = .001
+    
+    if args.grad_ent:
+        grad_p = -np.log(pt)
+        grad_p[grad_p > 100] = 1000
+        return grad_p
+
+    eps = 1/np.sqrt(ant_utils.total_state_space)
     return 1/(pt + eps)
 
-def init_state(env):
+# def entropy(pt):
+#     entropy = 0.0
+#     for p in pt.ravel():
+#         entropy += p*np.log(p)
+#     return -entropy
+
+def init_state(env):    
     env.env.set_state(ant_utils.qpos, ant_utils.qvel)
     state = env.env.state_vector()
     return state
@@ -208,7 +215,7 @@ def collect_entropy_policies(env, epochs, T, MODEL_DIR=''):
         sac = AntSoftActorCritic(lambda : gym.make(args.env), reward_fn=reward_fn, xid=i+1,
             seed=args.seed, gamma=args.gamma, 
             ac_kwargs=dict(hidden_sizes=[args.hid]*args.l),
-            logger_kwargs=logger_kwargs, normalization_factors=normalization_factors)
+            logger_kwargs=logger_kwargs, normalization_factors=normalization_factors, learn_reduced=args.learn_reduced)
         # TODO: start learning from initial state to add gradient?
         sac.soft_actor_critic(epochs=args.episodes, initial_state=initial_state) 
         policies.append(sac) # TODO: save to file
@@ -217,7 +224,7 @@ def collect_entropy_policies(env, epochs, T, MODEL_DIR=''):
         # CHANGED ORDER OF BASELINE COLLECTION AND NORMALIZATION PARAMS
         p, _ = sac.test_agent(T, deterministic=True, store_log=False, n=args.n) # TODO: initial state seed?
 
-        round_entropy = scipy.stats.entropy(p.flatten())
+        round_entropy = scipy.stats.entropy(p.ravel())
         entropies.append(round_entropy)
         ps.append(p)
 
@@ -227,7 +234,7 @@ def collect_entropy_policies(env, epochs, T, MODEL_DIR=''):
             execute_average_policy(env, policies, T, n=args.n, render=False)
         
         p_baseline, p_baseline_full = sac.test_agent_random(T, normalization_factors=normalization_factors, n=args.n)
-        round_entropy_baseline = scipy.stats.entropy(p_baseline.flatten())
+        round_entropy_baseline = scipy.stats.entropy(p_baseline.ravel())
 
         baseline_entropies.append(round_entropy_baseline)
         baseline_ps.append(p_baseline)
@@ -260,9 +267,9 @@ def collect_entropy_policies(env, epochs, T, MODEL_DIR=''):
         
         col_headers = ["", "baseline", "maxEnt"]
         col1 = ["round_entropy", "round_mixed_ent", "running_avg_ent", "entropy_of_running_p"]
-        ent = scipy.stats.entropy(running_avg_p_baseline.flatten())
+        ent = scipy.stats.entropy(running_avg_p_baseline.ravel())
         col2 = [round_entropy_baseline, "", running_avg_ent_baseline, ent]
-        col3 = [round_entropy, round_avg_ent, running_avg_ent, scipy.stats.entropy(running_avg_p.flatten())]
+        col3 = [round_entropy, round_avg_ent, running_avg_ent, scipy.stats.entropy(running_avg_p.ravel())]
         table = tabulate(np.transpose([col1, col2, col3]), col_headers, tablefmt="fancy_grid", floatfmt=".4f")
         print(table)
         
@@ -270,8 +277,13 @@ def collect_entropy_policies(env, epochs, T, MODEL_DIR=''):
         plotting.heatmap(running_avg_p_full_dim, average_p_full_dim, i)
         plotting.heatmap1(running_avg_p_baseline_full_dim, i)
 
-    indexes = [0, 5, 10, 25]
+    indexes = [0, 5, 10, 20]
     plotting.heatmap4(running_avg_ps_full_dim, running_avg_ps_baseline_full_dim, indexes)
+    
+#     indexes = [20, 30, 40, 50]
+#     plotting.heatmap4(running_avg_ps_full_dim, running_avg_ps_baseline_full_dim, indexes)
+    
+    plotting.running_average_entropy(running_avg_entropies, running_avg_entropies_baseline)
     return policies
 
 def main():

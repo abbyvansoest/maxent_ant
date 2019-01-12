@@ -11,8 +11,6 @@ parser.add_argument('--lr', type=float, default=1e-3, metavar='lr',
                     help='learning rate')
 parser.add_argument('--eps', type=float, default=0.05, metavar='eps',
                     help='exploration rate')
-parser.add_argument('--train_steps', type=int, default=500, metavar='ts',
-                    help='number of steps per episodes')
 parser.add_argument('--episodes', type=int, default=100, metavar='ep',
                     help='number of episodes per agent')
 parser.add_argument('--epochs', type=int, default=50, metavar='epo',
@@ -34,19 +32,19 @@ parser.add_argument('--exp_name', type=str, default='ant_sac')
 
 parser.add_argument('--save_models', action='store_true',
                     help='collect a video of the final policy')
-parser.add_argument('--record', action='store_true',
-                    help='collect a video of the final policy')
 parser.add_argument('--render', action='store_true',
                     help='render the environment')
-parser.add_argument('--use_avg_reward_fn', action='store_true',
-                    help='use averaged p as reward_fn')
 
 parser.add_argument('--gaussian', action='store_true',
                     help='reduce dimension with random gaussian')
 parser.add_argument('--reduce_dim', type=int, default=5, metavar='rd',
                     help='dimension reduction parameter')
+parser.add_argument('--learn_reduced', action='store_true',
+                    help='sac algorithm learns on reduced state')
 parser.add_argument('--max_sigma', action='store_true',
                     help='use max sigma approach in policy averaging')
+parser.add_argument('--grad_ent', action='store_true',
+                    help='use original gradient of entropy rewards')
 
 args = parser.parse_args()
 
@@ -139,7 +137,7 @@ def get_num_states(obs_dim, state_bins):
     elif args.env == "Pendulum-v0":
         return (pend_na, pend_nv)
 
-if args.env != 'Ant-v2':
+if args.env != 'Ant-v2' and args.env != 'Humanoid-v2':
     action_dim = get_action_dim()
     obs_dim = get_obs_dim()
     state_bins = get_state_bins()

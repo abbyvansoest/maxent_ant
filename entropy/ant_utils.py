@@ -25,44 +25,42 @@ import gym
 import time
 import numpy as np
 
-from experience_buffer import ExperienceBuffer
 import utils
 args = utils.get_args()
 
-env = gym.make('Ant-v2')
-buffer = ExperienceBuffer()
+env = gym.make(args.env)
 
 dim_dict = {
     0:"x",
     1:"y",
     2:"z",      # have as special coordinates that you do not project. bin at appropriate value for these coordinates
-    3:"x torso",
-    4:"y torso",
-    5:"z torso",
-    6:"w torso",
-    7:"joint 1 angle",
-    8:"joint 2 angle",
-    9:"joint 3 angle",
-    10:"joint 4 angle",
-    11:"joint 5 angle",
-    12:"joint 6 angle",
-    13:"joint 7 angle",
-    14:"joint 8 angle",
-    15:"3d veloity/angular velocity",
-    16:"3d veloity/angular velocity",
-    17:"3d veloity/angular velocity",
-    18:"3d veloity/angular velocity",
-    19:"3d veloity/angular velocity",
-    20:"3d veloity/angular velocity",
-    21:"3d veloity/angular velocity",
-    22:"3d veloity/angular velocity",
-    23:"joint velocity",
-    24:"joint velocity",
-    25:"joint velocity",
-    26:"joint velocity",
-    27:"joint velocity",
-    28:"joint velocity",
-    29:"joint velocity",
+#     3:"x torso",
+#     4:"y torso",
+#     5:"z torso",
+#     6:"w torso",
+#     7:"joint 1 angle",
+#     8:"joint 2 angle",
+#     9:"joint 3 angle",
+#     10:"joint 4 angle",
+#     11:"joint 5 angle",
+#     12:"joint 6 angle",
+#     13:"joint 7 angle",
+#     14:"joint 8 angle",
+#     15:"3d veloity/angular velocity",
+#     16:"3d veloity/angular velocity",
+#     17:"3d veloity/angular velocity",
+#     18:"3d veloity/angular velocity",
+#     19:"3d veloity/angular velocity",
+#     20:"3d veloity/angular velocity",
+#     21:"3d veloity/angular velocity",
+#     22:"3d veloity/angular velocity",
+#     23:"joint velocity",
+#     24:"joint velocity",
+#     25:"joint velocity",
+#     26:"joint velocity",
+#     27:"joint velocity",
+#     28:"joint velocity",
+#     29:"joint velocity",
 }
 
 qpos = env.env.init_qpos
@@ -81,17 +79,19 @@ start = 0
 stop = 2
 
 special = [0,1]
-min_x, min_y = -8, -8
-max_x, max_y = 8, 8
-x_bins, y_bins = 30, 30
+min_x, min_y = -6, -6
+max_x, max_y = 6, 6
+x_bins, y_bins = 20, 20
 
 min_bin_full = -10
 max_bin_full = 10
-num_bins_full = 20
+num_bins_full = 18
 
 reduce_dim = args.reduce_dim
 expected_state_dim = len(special) + reduce_dim
 G = np.transpose(np.random.normal(0, 1, (state_dim - len(special), reduce_dim)))
+
+total_state_space = x_bins*y_bins* (num_bins**reduce_dim)
 
 def convert_obs(observation):
     new_obs = []
@@ -134,7 +134,6 @@ def get_state_bins_full_state():
     for i in range(start, stop):
         state_bins.append(discretize_range(min_bin_full, max_bin_full, num_bins_full))
     return state_bins
-
 
 def get_num_states(state_bins):
     num_states = []

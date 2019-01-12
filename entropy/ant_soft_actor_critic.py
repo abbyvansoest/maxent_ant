@@ -23,6 +23,7 @@ class ReplayBuffer:
     """
 
     def __init__(self, obs_dim, act_dim, size):
+        print(obs_dim)
         self.obs1_buf = np.zeros([size, obs_dim], dtype=np.float32)
         self.obs2_buf = np.zeros([size, obs_dim], dtype=np.float32)
         self.acts_buf = np.zeros([size, act_dim], dtype=np.float32)
@@ -61,7 +62,7 @@ class AntSoftActorCritic:
 
     def __init__(self, env_fn, reward_fn=[], actor_critic=core.mlp_actor_critic, xid=0, seed=0, max_ep_len=1000,
         gamma=.99, alpha=0.2, lr=1e-3, polyak=0.995, replay_size=int(1e6), 
-        ac_kwargs=dict(), logger_kwargs=dict(), normalization_factors=[]):
+        ac_kwargs=dict(), logger_kwargs=dict(), normalization_factors=[], learn_reduced=False):
 
         tf.set_random_seed(seed)
         np.random.seed(seed)
@@ -74,8 +75,12 @@ class AntSoftActorCritic:
         self.max_ep_len = max_ep_len
         self.reward_fn = reward_fn
         self.normalization_factors = normalization_factors
+        self.learn_reduced = learn_reduced
+        
         self.env, self.test_env = env_fn(), env_fn()
         self.obs_dim = self.env.observation_space.shape[0]
+        if self.learn_reduced:
+            self.obs_dim = ant_utils.expected_state_dim
         self.act_dim = self.env.action_space.shape[0]
 
         # Action limit for clamping: critically, assumes all dimensions share the same bound!
@@ -154,7 +159,9 @@ class AntSoftActorCritic:
         tup = tuple(ant_utils.discretize_state(get_state(env, o), self.normalization_factors))
         return self.reward_fn[tup]
 
-    def get_action(self, o, deterministic=False, sess=None):
+    def get_action(self, o, deterministic=False, sess=None): #HERE
+        if self.learn_reduced:
+            o = ant_utils.convert_obs(get_state(self.env, o))
         with self.graph.as_default():
             act_op = self.mu if deterministic else self.pi
             if sess is not None:
@@ -163,6 +170,8 @@ class AntSoftActorCritic:
             return action
         
     def get_sigma(self, o):
+        if self.learn_reduced:
+            o = ant_utils.convert_obs(get_state(self.env, o))
         with self.graph.as_default():
             return self.sess.run(self.std, feed_dict={self.x_ph: o.reshape(1,-1)})[0]
 
@@ -171,15 +180,14 @@ class AntSoftActorCritic:
         p = np.zeros(shape=(tuple(ant_utils.num_states)))
         p_full_dim = np.zeros(shape=(tuple(ant_utils.num_states_full)))
         
-        #buffer = ExperienceBuffer()
         denom = 0
 
         for j in range(n):
             o, r, d, ep_ret, ep_len = self.test_env.reset(), 0, False, 0, 0
 
             if len(initial_state) > 0:
-                qpos = initial_state[:15]
-                qvel = initial_state[15:]
+                qpos = initial_state[:len(ant_utils.qpos)]
+                qvel = initial_state[len(ant_utils.qpos):]
                 self.test_env.env.set_state(qpos, qvel)
                 o = self.test_env.env._get_obs()
 
@@ -187,9 +195,6 @@ class AntSoftActorCritic:
                 # Take deterministic actions at test time 
                 a = self.get_action(o, deterministic, sess)
                 o, r, d, _ = self.test_env.step(a)
-                
-                # collect experience into a buffer
-                #buffer.store(get_state(self.test_env, o))
                 
                 tup = tuple(ant_utils.discretize_state(get_state(self.test_env, o), self.normalization_factors))
                 p[tup] += 1
@@ -204,8 +209,6 @@ class AntSoftActorCritic:
             if store_log:
                 self.logger.store(TestEpRet=ep_ret, TestEpLen=ep_len)
                 
-#         p = buffer.get_discrete_distribution()
-#         p_full_dim = buffer.get_discrete_distribution_full()
         p /= float(denom)
         p_full_dim /= float(denom)
         
@@ -216,7 +219,6 @@ class AntSoftActorCritic:
         p = np.zeros(shape=(tuple(ant_utils.num_states)))
         p_full_dim = np.zeros(shape=(tuple(ant_utils.num_states_full)))
 
-#         buffer = ExperienceBuffer()
         denom = 0
 
         for j in range(n):
@@ -225,7 +227,6 @@ class AntSoftActorCritic:
                 a = self.test_env.action_space.sample() # TODO: should I limit action space at all?
                 o, r, d, _ = self.test_env.step(a)
                 r = self.reward(self.test_env, r, o)
-                #buffer.store(get_state(self.test_env, o))
                 
                 tup = tuple(ant_utils.discretize_state(get_state(self.test_env, o), normalization_factors))
                 p[tup] += 1
@@ -233,9 +234,6 @@ class AntSoftActorCritic:
                 p_full_dim[tup_full] += 1
                 
                 denom += 1
-                
-#         p = buffer.get_discrete_distribution()
-#         p_full_dim = buffer.get_discrete_distribution_full()
         
         p /= float(denom)
         p_full_dim /= float(denom)
@@ -260,8 +258,8 @@ class AntSoftActorCritic:
             start_time = time.time()
             o, r, d, ep_ret, ep_len = self.env.reset(), 0, False, 0, 0
             if len(initial_state) > 0:
-                qpos = initial_state[:15]
-                qvel = initial_state[15:]
+                qpos = initial_state[:len(ant_utils.qpos)]
+                qvel = initial_state[len(ant_utils.qpos):]
                 self.test_env.env.set_state(qpos, qvel)
                 o = self.test_env.env._get_obs()
 
@@ -283,6 +281,9 @@ class AntSoftActorCritic:
                 # Step the env
                 o2, r, d, _ = self.env.step(a)
                 r = self.reward(self.env, r, o2)
+                
+#                 print(get_state(self.env, o2))
+
 
                 ep_ret += r
                 ep_len += 1
@@ -293,7 +294,11 @@ class AntSoftActorCritic:
                 d = False if ep_len == self.max_ep_len else d
 
                 # Store experience to replay buffer
-                self.replay_buffer.store(o, a, r, o2, d)
+                if self.learn_reduced:
+                    self.replay_buffer.store(ant_utils.convert_obs(get_state(self.env, o)), 
+                                             a, r, ant_utils.convert_obs(get_state(self.env, o2)), d)
+                else:
+                    self.replay_buffer.store(o, a, r, o2, d)
 
                 # Super critical: update most recent observation.
                 o = o2
@@ -325,11 +330,10 @@ class AntSoftActorCritic:
                     self.logger.store(EpRet=ep_ret, EpLen=ep_len)
                     o, r, d, ep_ret, ep_len = self.env.reset(), 0, False, 0, 0
                     if len(initial_state) > 0:
-                        qpos = initial_state[:15]
-                        qvel = initial_state[15:]
+                        qpos = initial_state[:len(ant_utils.qpos)]
+                        qvel = initial_state[len(ant_utils.qpos):]
                         self.test_env.env.set_state(qpos, qvel)
                         o = self.test_env.env._get_obs()
-                    # print("New trajectory")
 
                 # End of epoch wrap-up
                 if t > 0 and t % steps_per_epoch == 0:
