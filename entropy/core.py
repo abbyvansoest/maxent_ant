@@ -66,7 +66,9 @@ def mlp_gaussian_policy(x, a, hidden_sizes, activation, output_activation):
     log_std = LOG_STD_MIN + 0.5 * (LOG_STD_MAX - LOG_STD_MIN) * (log_std + 1)
 
     std = tf.exp(log_std)
-    pi = mu + tf.random_normal(tf.shape(mu)) * std
+    pi = mu + tf.random_normal(tf.shape(mu)) * std # don't like this way of doing pi....
+    # want to have distribution with mu, std and select
+#     pi = tf.random.normal(tf.shape(mu), mean=mu, stddev=std)
     logp_pi = gaussian_likelihood(pi, mu, log_std)
     return mu, pi, logp_pi, std
 

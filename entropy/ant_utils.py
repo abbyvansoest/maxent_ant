@@ -85,7 +85,7 @@ x_bins, y_bins = 20, 20
 
 min_bin_full = -10
 max_bin_full = 10
-num_bins_full = 18
+num_bins_full = 15
 
 reduce_dim = args.reduce_dim
 expected_state_dim = len(special) + reduce_dim

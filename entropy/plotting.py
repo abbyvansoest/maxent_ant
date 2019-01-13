@@ -51,7 +51,7 @@ def running_average_entropy_window(window_running_avg_ents, window_running_avg_e
     plt.title("Policy entropy over time, window = %d" % window)
     plt.savefig(fname)
 
-def heatmap1(avg_p, i):
+def heatmap1(avg_p, i, directory='baseline'):
     # Create running average heatmap.
     plt.figure()
     min_value = np.min(np.ma.log(avg_p))
@@ -64,7 +64,7 @@ def heatmap1(avg_p, i):
         plt.xlabel(ant_utils.dim_dict[ant_utils.start])
         plt.ylabel(ant_utils.dim_dict[ant_utils.start+1])
         
-    baseline_heatmap_dir = FIG_DIR + model_time + '/' + 'baseline' + '/'
+    baseline_heatmap_dir = FIG_DIR + model_time + '/' + directory + '/'
     if not os.path.exists(baseline_heatmap_dir):
         os.makedirs(baseline_heatmap_dir)
     fname = baseline_heatmap_dir + "heatmap_%02d.png" % i

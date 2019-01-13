@@ -15,6 +15,10 @@ from experience_buffer import ExperienceBuffer
 
 def get_state(env, obs):
     state = env.env.state_vector()
+    if not np.array_equal(obs[:len(state) - 2], state[2:]):
+        print(obs)
+        print(state)
+        raise ValueError("state and observation are not equal")
     return state
 
 class ReplayBuffer:
@@ -78,7 +82,8 @@ class AntSoftActorCritic:
         self.learn_reduced = learn_reduced
         
         self.env, self.test_env = env_fn(), env_fn()
-        self.obs_dim = self.env.observation_space.shape[0]
+#         self.obs_dim = self.env.observation_space.shape[0]
+        self.obs_dim = len(self.env.env.state_vector())
         if self.learn_reduced:
             self.obs_dim = ant_utils.expected_state_dim
         self.act_dim = self.env.action_space.shape[0]
@@ -156,12 +161,12 @@ class AntSoftActorCritic:
             return r
         
         # use self.normalization_factors to normalize the state.
-        tup = tuple(ant_utils.discretize_state(get_state(env, o), self.normalization_factors))
+        tup = tuple(ant_utils.discretize_state(o, self.normalization_factors))
         return self.reward_fn[tup]
 
-    def get_action(self, o, deterministic=False, sess=None): #HERE
+    def get_action(self, o, deterministic=False, sess=None): 
         if self.learn_reduced:
-            o = ant_utils.convert_obs(get_state(self.env, o))
+            o = ant_utils.convert_obs(o)
         with self.graph.as_default():
             act_op = self.mu if deterministic else self.pi
             if sess is not None:
@@ -171,7 +176,7 @@ class AntSoftActorCritic:
         
     def get_sigma(self, o):
         if self.learn_reduced:
-            o = ant_utils.convert_obs(get_state(self.env, o))
+            o = ant_utils.convert_obs(o)
         with self.graph.as_default():
             return self.sess.run(self.std, feed_dict={self.x_ph: o.reshape(1,-1)})[0]
 
@@ -184,21 +189,23 @@ class AntSoftActorCritic:
 
         for j in range(n):
             o, r, d, ep_ret, ep_len = self.test_env.reset(), 0, False, 0, 0
-
+            
             if len(initial_state) > 0:
                 qpos = initial_state[:len(ant_utils.qpos)]
                 qvel = initial_state[len(ant_utils.qpos):]
                 self.test_env.env.set_state(qpos, qvel)
                 o = self.test_env.env._get_obs()
-
+            
+            o = get_state(self.test_env, o)
             while not(d or (ep_len == T)):
                 # Take deterministic actions at test time 
                 a = self.get_action(o, deterministic, sess)
                 o, r, d, _ = self.test_env.step(a)
+                o = get_state(self.test_env, o)
                 
-                tup = tuple(ant_utils.discretize_state(get_state(self.test_env, o), self.normalization_factors))
+                tup = tuple(ant_utils.discretize_state(o, self.normalization_factors))
                 p[tup] += 1
-                tup_full = tuple(ant_utils.discretize_state_full(get_state(self.test_env, o), self.normalization_factors))
+                tup_full = tuple(ant_utils.discretize_state_full(o, self.normalization_factors))
                 p_full_dim[tup_full] += 1
                 
                 r = self.reward(self.test_env, r, o)
@@ -223,14 +230,16 @@ class AntSoftActorCritic:
 
         for j in range(n):
             o, r, d, ep_ret, ep_len = self.test_env.reset(), 0, False, 0, 0
+            o = get_state(self.test_env, o)
             while not(d or (ep_len == T)):
                 a = self.test_env.action_space.sample() # TODO: should I limit action space at all?
                 o, r, d, _ = self.test_env.step(a)
+                o = get_state(self.test_env, o)
                 r = self.reward(self.test_env, r, o)
                 
-                tup = tuple(ant_utils.discretize_state(get_state(self.test_env, o), normalization_factors))
+                tup = tuple(ant_utils.discretize_state(o, normalization_factors))
                 p[tup] += 1
-                tup_full = tuple(ant_utils.discretize_state_full(get_state(self.test_env, o), normalization_factors))
+                tup_full = tuple(ant_utils.discretize_state_full(o, normalization_factors))
                 p_full_dim[tup_full] += 1
                 
                 denom += 1
@@ -260,8 +269,10 @@ class AntSoftActorCritic:
             if len(initial_state) > 0:
                 qpos = initial_state[:len(ant_utils.qpos)]
                 qvel = initial_state[len(ant_utils.qpos):]
-                self.test_env.env.set_state(qpos, qvel)
-                o = self.test_env.env._get_obs()
+                self.env.env.set_state(qpos, qvel)
+                o = self.env.env._get_obs()
+            
+            o = get_state(self.env, o)
 
             total_steps = steps_per_epoch * epochs
 
@@ -280,11 +291,9 @@ class AntSoftActorCritic:
 
                 # Step the env
                 o2, r, d, _ = self.env.step(a)
+                o2 = get_state(self.env, o2)
                 r = self.reward(self.env, r, o2)
                 
-#                 print(get_state(self.env, o2))
-
-
                 ep_ret += r
                 ep_len += 1
 
@@ -295,8 +304,8 @@ class AntSoftActorCritic:
 
                 # Store experience to replay buffer
                 if self.learn_reduced:
-                    self.replay_buffer.store(ant_utils.convert_obs(get_state(self.env, o)), 
-                                             a, r, ant_utils.convert_obs(get_state(self.env, o2)), d)
+                    self.replay_buffer.store(ant_utils.convert_obs(o), 
+                                             a, r, ant_utils.convert_obs(o2), d)
                 else:
                     self.replay_buffer.store(o, a, r, o2, d)
 
@@ -332,8 +341,9 @@ class AntSoftActorCritic:
                     if len(initial_state) > 0:
                         qpos = initial_state[:len(ant_utils.qpos)]
                         qvel = initial_state[len(ant_utils.qpos):]
-                        self.test_env.env.set_state(qpos, qvel)
-                        o = self.test_env.env._get_obs()
+                        self.env.env.set_state(qpos, qvel)
+                        o = self.env.env._get_obs()
+                    o = get_state(self.env, o)
 
                 # End of epoch wrap-up
                 if t > 0 and t % steps_per_epoch == 0:

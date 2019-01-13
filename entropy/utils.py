@@ -40,11 +40,13 @@ parser.add_argument('--gaussian', action='store_true',
 parser.add_argument('--reduce_dim', type=int, default=5, metavar='rd',
                     help='dimension reduction parameter')
 parser.add_argument('--learn_reduced', action='store_true',
-                    help='sac algorithm learns on reduced state')
+                    help='sac algo learns on reduced state')
 parser.add_argument('--max_sigma', action='store_true',
                     help='use max sigma approach in policy averaging')
 parser.add_argument('--grad_ent', action='store_true',
                     help='use original gradient of entropy rewards')
+parser.add_argument('--use_state', action='store_true',
+                    help='learn from state rather than obs')
 
 args = parser.parse_args()
 
