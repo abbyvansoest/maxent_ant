@@ -45,8 +45,6 @@ parser.add_argument('--max_sigma', action='store_true',
                     help='use max sigma approach in policy averaging')
 parser.add_argument('--grad_ent', action='store_true',
                     help='use original gradient of entropy rewards')
-parser.add_argument('--use_state', action='store_true',
-                    help='learn from state rather than obs')
 
 args = parser.parse_args()
 
