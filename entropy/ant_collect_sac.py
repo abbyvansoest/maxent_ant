@@ -6,6 +6,7 @@ import os
 import time
 from datetime import datetime
 
+import random
 import numpy as np
 import scipy.stats
 from scipy.interpolate import interp2d
@@ -23,10 +24,6 @@ import ant_utils
 import plotting
 from ant_soft_actor_critic import AntSoftActorCritic
 from experience_buffer import ExperienceBuffer
-
-import torch
-from torch.distributions import Normal
-import random
 
 args = utils.get_args()
 
@@ -108,6 +105,7 @@ def execute_average_policy(env, policies, T, initial_state=[], n=10, render=Fals
                 env.render()
             if done:
                 env.reset()
+                done = False
 
     env.close()
 
@@ -152,13 +150,8 @@ def collect_entropy_policies(env, epochs, T, MODEL_DIR=''):
     v_y = ant_utils.discretize_value(0, ant_utils.state_bins[1])
     reward_fn[tuple((v_x, v_y))] = 1
     
-#     # try random execution
-#     sac = AntSoftActorCritic(lambda : gym.make(args.env), xid=0,
-#             seed=args.seed)
-#     seed, _ = sac.test_agent_random(T)
-#     reward_fn = grad_ent(seed)
-    
     print(reward_fn.shape)
+    print(seed)
     print(tuple(ant_utils.discretize_state(seed)))
     print(reward_fn[tuple(ant_utils.discretize_state(seed))])
 
@@ -184,8 +177,21 @@ def collect_entropy_policies(env, epochs, T, MODEL_DIR=''):
     running_avg_ps_baseline_full_dim = []
 
     policies = []
-    normalization_factors = []
     initial_state = init_state(env)
+    
+    prebuf = ExperienceBuffer()
+    env.reset()
+    for t in range(T):     
+        action = env.action_space.sample()
+        obs, reward, done, _ = env.step(action)
+        prebuf.store(get_state(env, obs))
+        
+        if done:
+            env.reset()
+            done = False
+            
+    prebuf.normalize()
+    normalization_factors = prebuf.normalization_factors
 
     for i in range(epochs):
 
