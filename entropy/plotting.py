@@ -39,6 +39,7 @@ def running_average_entropy(running_avg_entropies, running_avg_entropies_baselin
     plt.ylabel("Running average entropy of cumulative policy")
     plt.title("Policy Entropy over Time")
     plt.savefig(fname)
+    plt.close()
 
 def running_average_entropy_window(window_running_avg_ents, window_running_avg_ents_baseline, window):
     fname = get_next_file(FIG_DIR, model_time, "running_avg_window", ".png")
@@ -50,12 +51,16 @@ def running_average_entropy_window(window_running_avg_ents, window_running_avg_e
     plt.ylabel("Running avg entropy")
     plt.title("Policy entropy over time, window = %d" % window)
     plt.savefig(fname)
+    plt.close()
 
 def heatmap1(avg_p, i, directory='baseline'):
     # Create running average heatmap.
     plt.figure()
     min_value = np.min(np.ma.log(avg_p))
-    plt.imshow(np.ma.log(avg_p).filled(min_value), interpolation='spline16', cmap='Oranges')
+    if min_value == 0:
+        plt.imshow(avg_p, interpolation='spline16', cmap='Oranges')
+    else:
+        plt.imshow(np.ma.log(avg_p).filled(min_value), interpolation='spline16', cmap='Oranges')
 
     plt.xticks([], [])
     plt.yticks([], [])
@@ -69,13 +74,16 @@ def heatmap1(avg_p, i, directory='baseline'):
         os.makedirs(baseline_heatmap_dir)
     fname = baseline_heatmap_dir + "heatmap_%02d.png" % i
     plt.savefig(fname)
+    plt.close()
 
 def heatmap(running_avg_p, avg_p, i):
     # Create running average heatmap.
     plt.figure()
     min_value = np.min(np.ma.log(running_avg_p))
-    #print(running_avg_p)
-    plt.imshow(np.ma.log(running_avg_p).filled(min_value), interpolation='spline16', cmap='Blues')
+    if min_value == 0:
+        plt.imshow(running_avg_p, interpolation='spline16', cmap='Blues')
+    else:
+        plt.imshow(np.ma.log(running_avg_p).filled(min_value), interpolation='spline16', cmap='Blues')
 
     plt.xticks([], [])
     plt.yticks([], [])
@@ -101,8 +109,10 @@ def heatmap(running_avg_p, avg_p, i):
     # Create episode heatmap.
     plt.figure()
     min_value = np.min(np.ma.log(avg_p))
-    #print(avg_p)
-    plt.imshow(np.ma.log(avg_p).filled(min_value), interpolation='spline16', cmap='Blues')
+    if min_value == 0:
+        plt.imshow(avg_p, interpolation='spline16', cmap='Blues')
+    else:
+        plt.imshow(np.ma.log(avg_p).filled(min_value), interpolation='spline16', cmap='Blues')
 
     plt.xticks([], [])
     plt.yticks([], [])
@@ -123,6 +133,7 @@ def heatmap(running_avg_p, avg_p, i):
         os.makedirs(avg_heatmap_dir)
     fname = avg_heatmap_dir + "heatmap_%02d.png" % i
     plt.savefig(fname)
+    plt.close()
 
 
 def heatmap4(running_avg_ps, running_avg_ps_baseline, indexes=[0,1,2,3]):
@@ -135,22 +146,34 @@ def heatmap4(running_avg_ps, running_avg_ps_baseline, indexes=[0,1,2,3]):
     # min_value = np.minimum(min_value, min_value_baseline)
 
     # TODO: colorbar for the global figure
-    for idx, ax in zip(indexes,row1):
+    idx = 0
+    for epoch, ax in zip(indexes,row1):
         min_value = np.min(np.ma.log(running_avg_ps[idx]))
-        ax.imshow(np.ma.log(running_avg_ps[idx]).filled(min_value), interpolation='spline16', cmap='Blues')
-        ax.set_title("Epoch %d" % idx)
+        
+        if min_value == 0:
+            ax.imshow(running_avg_ps[idx], interpolation='spline16', cmap='Blues')
+        else:
+            ax.imshow(np.ma.log(running_avg_ps[idx]).filled(min_value), interpolation='spline16', cmap='Blues')
+        ax.set_title("Epoch %d" % epoch)
         ax.xaxis.set_ticks([])
         ax.yaxis.set_ticks([])
+        idx += 1
     
-    for idx, ax in zip(indexes,row2):
+    idx = 0
+    for epoch, ax in zip(indexes,row2):
         min_value = np.min(np.ma.log(running_avg_ps_baseline[idx]))
-        ax.imshow(np.ma.log(running_avg_ps_baseline[idx]).filled(min_value), interpolation='spline16', cmap='Oranges')
+        if min_value == 0:
+            ax.imshow(running_avg_ps_baseline[idx], interpolation='spline16', cmap='Oranges')
+        else:
+            ax.imshow(np.ma.log(running_avg_ps_baseline[idx]).filled(min_value), interpolation='spline16', cmap='Oranges')
         ax.xaxis.set_ticks([])
         ax.yaxis.set_ticks([])
+        idx += 1
 
     plt.tight_layout()
     fname = get_next_file(FIG_DIR, model_time, "time_heatmaps", ".png")
     plt.savefig(fname)
+    plt.close()
     # plt.colorbar()
     # plt.show()
 
@@ -169,6 +192,7 @@ def difference_heatmap(running_avg_ps, running_avg_ps_baseline):
     plt.colorbar()
     plt.title(r'$p_{\pi_{entropy}} - p_{\pi_{random}}$')
     plt.savefig(fname)
+    plt.close()
     # plt.show()
     
 def reward_vs_t(reward_at_t, epoch, i):
@@ -185,6 +209,7 @@ def reward_vs_t(reward_at_t, epoch, i):
         os.makedirs(t_dir)
     fname = t_dir + "epoch_%02d_%02d.png" % (epoch,i)
     plt.savefig(fname)
+    plt.close()
 
 def percent_state_space_reached(pcts, pcts_baseline, ext=''):
     plt.figure()
@@ -195,3 +220,4 @@ def percent_state_space_reached(pcts, pcts_baseline, ext=''):
     plt.legend(["MaxEnt", "Random"])
     fname = FIG_DIR + model_time + '/pct_visited' + ext + '.png'
     plt.savefig(fname)
+    plt.close()
