@@ -164,13 +164,11 @@ class AntSoftActorCritic:
         tup = tuple(ant_utils.discretize_state(o, self.normalization_factors))
         return self.reward_fn[tup]
 
-    def get_action(self, o, deterministic=False, sess=None): 
+    def get_action(self, o, deterministic=False): 
         if self.learn_reduced:
             o = ant_utils.convert_obs(o)
         with self.graph.as_default():
             act_op = self.mu if deterministic else self.pi
-            if sess is not None:
-                return sess.run(act_op, feed_dict={self.x_ph: o.reshape(1,-1)})[0]
             action = self.sess.run(act_op, feed_dict={self.x_ph: o.reshape(1,-1)})[0]
             return action
         
@@ -180,10 +178,10 @@ class AntSoftActorCritic:
         with self.graph.as_default():
             return self.sess.run(self.std, feed_dict={self.x_ph: o.reshape(1,-1)})[0]
 
-    def test_agent(self, T, n=10, initial_state=[], sess=None, store_log=True, deterministic=True, reset=False):
+    def test_agent(self, T, n=10, initial_state=[], store_log=True, deterministic=True, reset=False):
         
         p = np.zeros(shape=(tuple(ant_utils.num_states)))
-        p_full_dim = np.zeros(shape=(tuple(ant_utils.num_states_full)))
+        p_xy = np.zeros(shape=(tuple(ant_utils.num_states_2d)))
         
         denom = 0
 
@@ -199,14 +197,14 @@ class AntSoftActorCritic:
             o = get_state(self.test_env, o)
             while not(d or (ep_len == T)):
                 # Take deterministic actions at test time 
-                a = self.get_action(o, deterministic, sess)
+                a = self.get_action(o, deterministic)
                 o, r, d, _ = self.test_env.step(a)
                 o = get_state(self.test_env, o)
                 
                 tup = tuple(ant_utils.discretize_state(o, self.normalization_factors))
                 p[tup] += 1
-                tup_full = tuple(ant_utils.discretize_state_full(o, self.normalization_factors))
-                p_full_dim[tup_full] += 1
+                tup_xy = tuple(ant_utils.discretize_state_2d(o, self.normalization_factors))
+                p_xy[tup_xy] += 1
                 
                 r = self.reward(self.test_env, r, o)
                 ep_ret += r
@@ -215,20 +213,22 @@ class AntSoftActorCritic:
                 
                 if d and reset:
                     self.test_env.reset()
+                    # Question: reset to most recent x,y location,
+                    # everything else normal?
                     d = False
 
             if store_log:
                 self.logger.store(TestEpRet=ep_ret, TestEpLen=ep_len)
                 
         p /= float(denom)
-        p_full_dim /= float(denom)
+        p_xy /= float(denom)
         
-        return p, p_full_dim
+        return p, p_xy
 
     def test_agent_random(self, T, normalization_factors=[], n=10):
         
         p = np.zeros(shape=(tuple(ant_utils.num_states)))
-        p_full_dim = np.zeros(shape=(tuple(ant_utils.num_states_full)))
+        p_xy = np.zeros(shape=(tuple(ant_utils.num_states_2d)))
 
         denom = 0
 
@@ -243,21 +243,20 @@ class AntSoftActorCritic:
                 
                 tup = tuple(ant_utils.discretize_state(o, normalization_factors))
                 p[tup] += 1
-                tup_full = tuple(ant_utils.discretize_state_full(o, normalization_factors))
-                p_full_dim[tup_full] += 1
+                tup_xy = tuple(ant_utils.discretize_state_2d(o, normalization_factors))
+                p_xy[tup_xy] += 1
                 
                 denom += 1
         
         p /= float(denom)
-        p_full_dim /= float(denom)
+        p_xy /= float(denom)
         
-        return p, p_full_dim
+        return p, p_xy
 
     def soft_actor_critic(self, initial_state=[], steps_per_epoch=5000, epochs=100,
             batch_size=100, start_steps=10000, save_freq=1):
         
         # TODO: play with start_steps
-        # TODO: play with batch size
 
         with self.graph.as_default():
 
@@ -292,6 +291,8 @@ class AntSoftActorCritic:
                 use the learned policy. 
                 """
                 if t > start_steps:
+                    if t == start_steps + 1:
+                        print("!!!! using policy !!!!")
                     a = self.get_action(o)
                 else:
                     a = self.env.action_space.sample()
