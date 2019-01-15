@@ -70,18 +70,18 @@ state_dim = int(env.env.state_vector().shape[0])
 action_dim = int(env.action_space.sample().shape[0])
 
 features = [2,7,8,9,10]
+height_bins = 20
 min_bin = -1 # THIS CRITICAL
 max_bin = 1
-height_bins = 20
-num_bins = 10
+num_bins = 12
 
 start = 0
 stop = 2
 
 special = [0,1]
-min_x, min_y = -6, -6
-max_x, max_y = 6, 6
-x_bins, y_bins = 20, 20
+min_x, min_y = -8, -8
+max_x, max_y = 8, 8
+x_bins, y_bins = 15, 15
 
 min_bin_full = -10
 max_bin_full = 10
