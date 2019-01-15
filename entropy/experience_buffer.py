@@ -9,7 +9,7 @@ class ExperienceBuffer:
         self.normalization_factors = []
         self.normalized = False
         self.p = None
-        self.p_full_dim = None
+        self.p_2d = None
         
     def store(self, state):
         if self.normalized:
@@ -57,21 +57,21 @@ class ExperienceBuffer:
             
         return p
         
-    def get_discrete_distribution_full(self):
+    def get_discrete_distribution_2d(self):
         
-        if self.p_full_dim is not None:
-            return self.p_full_dim
+        if self.p_2d is not None:
+            return self.p_2d
         
         # normalized buffer experience
         if not self.normalized:
             self.normalize()
             
-        p_full_dim = np.zeros(shape=(ant_utils.num_states_full))
+        p_2d = np.zeros(shape=(ant_utils.num_states_2d))
         for obs in self.buffer:
             # discritize obs, add to distribution tabulation.
-            p_full_dim[tuple(ant_utils.discretize_state_full(obs))] += 1
+            p_2d[tuple(ant_utils.discretize_state_2d(obs))] += 1
         
-        p_full_dim /= len(self.buffer)
-        self.p_full_dim = p_full_dim
+        p_2d /= len(self.buffer)
+        self.p_2d = p_2d
                 
-        return p_full_dim
+        return p_2d
