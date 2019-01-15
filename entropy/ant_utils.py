@@ -73,7 +73,7 @@ features = [2,7,8,9,10]
 height_bins = 20
 min_bin = -1 # THIS CRITICAL
 max_bin = 1
-num_bins = 12
+num_bins = 10
 
 start = 0
 stop = 2
@@ -83,9 +83,9 @@ min_x, min_y = -8, -8
 max_x, max_y = 8, 8
 x_bins, y_bins = 15, 15
 
-min_bin_full = -10
-max_bin_full = 10
-num_bins_full = 15
+min_bin_2d = -10
+max_bin_2d = 10
+num_bins_2d = 15
 
 reduce_dim = args.reduce_dim
 expected_state_dim = len(special) + reduce_dim
@@ -129,10 +129,10 @@ def get_state_bins_reduced():
         state_bins.append(discretize_range(min_bin, max_bin, num_bins))
     return state_bins
 
-def get_state_bins_full_state():
+def get_state_bins_2d_state():
     state_bins = []
     for i in range(start, stop):
-        state_bins.append(discretize_range(min_bin_full, max_bin_full, num_bins_full))
+        state_bins.append(discretize_range(min_bin_2d, max_bin_2d, num_bins_2d))
     return state_bins
 
 def get_num_states(state_bins):
@@ -148,15 +148,15 @@ else:
     state_bins = get_state_bins()
 num_states = get_num_states(state_bins)
 
-state_bins_full = get_state_bins_full_state()
-num_states_full = tuple([num_bins_full for i in range(start, stop)])
+state_bins_2d = get_state_bins_2d_state()
+num_states_2d = tuple([num_bins_2d for i in range(start, stop)])
 
 # Discretize the observation features and reduce them to a single list.
-def discretize_state_full(observation, norm=[]):
+def discretize_state_2d(observation, norm=[]):
     state = []
     for i in range(start, stop):
         feature = observation[i]
-        state.append(discretize_value(feature, state_bins_full[i - start]))
+        state.append(discretize_value(feature, state_bins_2d[i - start]))
     return state
 
 def discretize_state_normal(observation):
