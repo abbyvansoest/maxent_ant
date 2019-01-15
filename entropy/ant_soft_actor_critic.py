@@ -180,7 +180,7 @@ class AntSoftActorCritic:
         with self.graph.as_default():
             return self.sess.run(self.std, feed_dict={self.x_ph: o.reshape(1,-1)})[0]
 
-    def test_agent(self, T, n=10, initial_state=[], sess=None, store_log=True, deterministic=True):
+    def test_agent(self, T, n=10, initial_state=[], sess=None, store_log=True, deterministic=True, reset=False):
         
         p = np.zeros(shape=(tuple(ant_utils.num_states)))
         p_full_dim = np.zeros(shape=(tuple(ant_utils.num_states_full)))
@@ -212,6 +212,10 @@ class AntSoftActorCritic:
                 ep_ret += r
                 ep_len += 1
                 denom += 1
+                
+                if d and reset:
+                    self.test_env.reset()
+                    d = False
 
             if store_log:
                 self.logger.store(TestEpRet=ep_ret, TestEpLen=ep_len)
@@ -232,7 +236,7 @@ class AntSoftActorCritic:
             o, r, d, ep_ret, ep_len = self.test_env.reset(), 0, False, 0, 0
             o = get_state(self.test_env, o)
             while not(d or (ep_len == T)):
-                a = self.test_env.action_space.sample() # TODO: should I limit action space at all?
+                a = self.test_env.action_space.sample()
                 o, r, d, _ = self.test_env.step(a)
                 o = get_state(self.test_env, o)
                 r = self.reward(self.test_env, r, o)
@@ -251,6 +255,9 @@ class AntSoftActorCritic:
 
     def soft_actor_critic(self, initial_state=[], steps_per_epoch=5000, epochs=100,
             batch_size=100, start_steps=10000, save_freq=1):
+        
+        # TODO: play with start_steps
+        # TODO: play with batch size
 
         with self.graph.as_default():
 
@@ -323,7 +330,6 @@ class AntSoftActorCritic:
                     original paper.
                     """
                     for j in range(ep_len):
-                        # TODO: break into multiple GPUs?
                         batch = self.replay_buffer.sample_batch(batch_size)
                         feed_dict = {self.x_ph: batch['obs1'],
                                      self.x2_ph: batch['obs2'],
