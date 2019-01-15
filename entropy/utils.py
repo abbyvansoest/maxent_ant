@@ -27,7 +27,7 @@ parser.add_argument('--models_dir', type=str, default='logs/file.out', metavar='
 
 parser.add_argument('--hid', type=int, default=300)
 parser.add_argument('--l', type=int, default=1)
-parser.add_argument('--seed', '-s', type=int, default=0)
+parser.add_argument('--seed', '-s', type=int, default=-1)
 parser.add_argument('--exp_name', type=str, default='ant_sac')
 
 parser.add_argument('--save_models', action='store_true',
@@ -43,14 +43,18 @@ parser.add_argument('--gaussian', action='store_true',
                     help='reduce dimension with random gaussian')
 parser.add_argument('--reduce_dim', type=int, default=5, metavar='rd',
                     help='dimension reduction parameter')
+
 parser.add_argument('--learn_reduced', action='store_true',
                     help='sac algo learns on reduced state')
 parser.add_argument('--max_sigma', action='store_true',
                     help='use max sigma approach in policy averaging')
 parser.add_argument('--grad_ent', action='store_true',
                     help='use original gradient of entropy rewards')
+
 parser.add_argument('--start_steps', type=int, default=10000, metavar='ss',
                     help='start steps parameter')
+parser.add_argument('--initial_state', action='store_true',
+                    help='seed learning policies with initial state')
 
 args = parser.parse_args()
 
