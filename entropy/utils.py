@@ -37,6 +37,8 @@ parser.add_argument('--render', action='store_true',
 
 parser.add_argument('--deterministic', action='store_true',
                     help='act deterministically in mixed policy')
+parser.add_argument('--cumulative', action='store_true',
+                    help='use cumulative reward_fn')
 parser.add_argument('--gaussian', action='store_true',
                     help='reduce dimension with random gaussian')
 parser.add_argument('--reduce_dim', type=int, default=5, metavar='rd',
