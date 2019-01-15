@@ -154,7 +154,7 @@ def collect_entropy_policies(env, epochs, T, MODEL_DIR=''):
     direct = os.getcwd()+ '/data/'
     experiment_directory = direct + args.exp_name
     print(experiment_directory)
-    indexes = [1, 5, 10, 20]
+    indexes = [0, 5, 10, 20]
 #     indexes=[0,1,2,3]
 
     running_avg_p = np.zeros(shape=(tuple(ant_utils.num_states)))
@@ -210,17 +210,28 @@ def collect_entropy_policies(env, epochs, T, MODEL_DIR=''):
     print(reward_fn[tuple(ant_utils.discretize_state(seed, normalization_factors))])
 
     for i in range(epochs):
-
-        print("*** EPOCH: " + str(i))
-        print(initial_state)
+        print("*** ------- EPOCH %d ------- ***" % i)
+        
+        # clear initial state if applicable.
+        if not args.initial_state:
+            initial_state = []
+        else:
+            print(initial_state)
+            print(tuple(ant_utils.discretize_state_2d(initial_state, normalization_factors)))
+            print(tuple(ant_utils.discretize_state(initial_state, normalization_factors)))
         print("max reward: " + str(np.max(reward_fn)))
 
         logger_kwargs = setup_logger_kwargs("model" + str(i), data_dir=experiment_directory)
 
         # Learn policy that maximizes current reward function.
         print("Learning new oracle...")
+        if args.seed != -1:
+            seed = args.seed
+        else:
+            seed = random.randint(1, 100000)
+        print(type(seed))
         sac = AntSoftActorCritic(lambda : gym.make(args.env), reward_fn=reward_fn, xid=i+1,
-            seed=args.seed, gamma=args.gamma, 
+            seed=seed, gamma=args.gamma, 
             ac_kwargs=dict(hidden_sizes=[args.hid]*args.l),
             logger_kwargs=logger_kwargs, 
             normalization_factors=normalization_factors,
@@ -229,16 +240,14 @@ def collect_entropy_policies(env, epochs, T, MODEL_DIR=''):
         sac.soft_actor_critic(epochs=args.episodes, 
                               initial_state=initial_state, 
                               start_steps=args.start_steps) 
-        policies.append(sac) # TODO: save to file
-        
-        # policies.append({'logger':sac.logger, 'filename':???})
-        # save sess, filename, logger to model.
-        # then call logger.restore_tf_graph?
+        policies.append(sac)
 
         # CHANGED DETERMNISTIC HERE
         # CHANGED ORDER OF BASELINE COLLECTION AND NORMALIZATION PARAMS
         # ADDED INITIAL STATE IN test_agent() and execute_average_policy()
+        print("Test trained policy...")
         _, p_xy = sac.test_agent(T, initial_state=initial_state, deterministic=True, store_log=False, n=args.n, reset=True) # TODO: initial state seed?
+        _, p_xy_non_deterministic = sac.test_agent(T, initial_state=initial_state, deterministic=False, store_log=False, n=args.n, reset=True) # TODO: initial state seed?
 
         # Execute the cumulative average policy thus far.
         # Estimate distribution and entropy.
@@ -254,8 +263,6 @@ def collect_entropy_policies(env, epochs, T, MODEL_DIR=''):
         print("Updating maxEnt running averages...")
         running_avg_ent = running_avg_ent * (i)/float(i+1) + round_entropy/float(i+1)
         running_avg_ent_xy = running_avg_ent_xy * (i)/float(i+1) + round_entropy_xy/float(i+1)
-#         running_avg_p = running_avg_p * (i)/float(i+1) + average_p/float(i+1)
-#         running_avg_p_xy = running_avg_p_xy * (i)/float(i+1) + average_p_xy/float(i+1)
         running_avg_p *= (i)/float(i+1) 
         running_avg_p += average_p/float(i+1)
         running_avg_p_xy *= (i)/float(i+1) 
@@ -267,13 +274,13 @@ def collect_entropy_policies(env, epochs, T, MODEL_DIR=''):
             reward_fn = grad_ent(running_avg_p)
         else:
             reward_fn = grad_ent(average_p)
-        # delete big array
-        average_p = None
+        average_p = None # delete big array
         
         # (save for plotting)
         running_avg_entropies.append(running_avg_ent)
         if i in indexes:
-            running_avg_ps_xy.append(running_avg_p_xy) 
+            running_avg_ps_xy.append(np.copy(running_avg_p_xy))
+            print(len(running_avg_ps_xy))
 
         print("Collecting baseline experience....")
         p_baseline, p_baseline_xy = sac.test_agent_random(T, normalization_factors=normalization_factors, n=args.n)
@@ -284,9 +291,7 @@ def collect_entropy_policies(env, epochs, T, MODEL_DIR=''):
         print("Updating baseline running averages...")
         running_avg_ent_baseline = running_avg_ent_baseline * (i)/float(i+1) + round_entropy_baseline/float(i+1)
         running_avg_ent_baseline_xy = running_avg_ent_baseline_xy * (i)/float(i+1) + round_entropy_baseline_xy/float(i+1)
-        
-#         running_avg_p_baseline = running_avg_p_baseline * (i)/float(i+1) + p_baseline/float(i+1)
-#         running_avg_p_baseline_xy = running_avg_p_baseline_xy * (i)/float(i+1) + p_baseline_xy/float(i+1)
+
         running_avg_p_baseline *= (i)/float(i+1) 
         running_avg_p_baseline += p_baseline/float(i+1)
         running_avg_p_baseline_xy *= (i)/float(i+1) 
@@ -297,7 +302,8 @@ def collect_entropy_policies(env, epochs, T, MODEL_DIR=''):
         # (save for plotting)
         running_avg_entropies_baseline.append(running_avg_ent_baseline)
         if i in indexes:
-            running_avg_ps_baseline_xy.append(running_avg_p_baseline_xy) 
+            running_avg_ps_baseline_xy.append(np.copy(running_avg_p_baseline_xy))
+            print(len(running_avg_ps_xy))
     
         print(average_p_xy)
         print(p_baseline_xy)
@@ -335,7 +341,8 @@ def collect_entropy_policies(env, epochs, T, MODEL_DIR=''):
         plotting.heatmap(running_avg_p_xy, average_p_xy, i)
         plotting.heatmap1(running_avg_p_baseline_xy, i)
         plotting.heatmap1(p_xy, i, directory='p')
-
+        plotting.heatmap1(p_xy_non_deterministic, i, directory='p_non_deterministic')
+    
     # cumulative plots.
     plotting.heatmap4(running_avg_ps_xy, running_avg_ps_baseline_xy, indexes)
     plotting.running_average_entropy(running_avg_entropies, running_avg_entropies_baseline)
@@ -347,7 +354,7 @@ def collect_entropy_policies(env, epochs, T, MODEL_DIR=''):
 def main():
 
     # Suppress scientific notation.
-    np.set_printoptions(suppress=True, edgeitems=100, linewidth=150, precision=4)
+    np.set_printoptions(suppress=True, edgeitems=100, linewidth=150, precision=8)
 
     # Make environment.
     env = gym.make(args.env)
@@ -361,15 +368,9 @@ def main():
         os.makedirs(plotting.FIG_DIR+plotting.model_time)
 
     policies = collect_entropy_policies(env, args.epochs, args.T)
-
-    # average_p = exploration_policy.execute(args.T, render=True)
-#     overall_avg_ent = entropy([1])
-
-    print('*************')
-#     print("overall_avg_ent = %f" % overall_avg_ent)
-
     env.close()
 
+    print("*** ---------- ***")
     print("DONE")
 
 if __name__ == "__main__":
