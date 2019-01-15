@@ -64,7 +64,7 @@ def heatmap1(avg_p, i, directory='baseline'):
         plt.xlabel(ant_utils.dim_dict[ant_utils.start])
         plt.ylabel(ant_utils.dim_dict[ant_utils.start+1])
         
-    baseline_heatmap_dir = FIG_DIR + model_time + '/' + directory + '/'
+    baseline_heatmap_dir = FIG_DIR + model_time + directory + '/'
     if not os.path.exists(baseline_heatmap_dir):
         os.makedirs(baseline_heatmap_dir)
     fname = baseline_heatmap_dir + "heatmap_%02d.png" % i
@@ -92,7 +92,7 @@ def heatmap(running_avg_p, avg_p, i):
         plt.ylabel(ant_utils.dim_dict[ant_utils.start+1])
         
     # plt.title("Policy distribution at step %d" % i)
-    running_avg_heatmap_dir = FIG_DIR + model_time + '/' + 'running_avg' + '/'
+    running_avg_heatmap_dir = FIG_DIR + model_time + 'running_avg/'
     if not os.path.exists(running_avg_heatmap_dir):
         os.makedirs(running_avg_heatmap_dir)
     fname = running_avg_heatmap_dir + "heatmap_%02d.png" % i
@@ -118,7 +118,7 @@ def heatmap(running_avg_p, avg_p, i):
         plt.ylabel(ant_utils.dim_dict[ant_utils.start+1])
 
     # plt.title("Policy distribution at step %d" % i)
-    avg_heatmap_dir = FIG_DIR + model_time + '/' + 'avg' + '/'
+    avg_heatmap_dir = FIG_DIR + model_time + 'avg/'
     if not os.path.exists(avg_heatmap_dir):
         os.makedirs(avg_heatmap_dir)
     fname = avg_heatmap_dir + "heatmap_%02d.png" % i
@@ -149,7 +149,7 @@ def heatmap4(running_avg_ps, running_avg_ps_baseline, indexes=[0,1,2,3]):
         ax.yaxis.set_ticks([])
 
     plt.tight_layout()
-    fname = get_next_file(FIG_DIR, model_time+'/', "time_heatmaps", ".png")
+    fname = get_next_file(FIG_DIR, model_time, "time_heatmaps", ".png")
     plt.savefig(fname)
     # plt.colorbar()
     # plt.show()
@@ -170,3 +170,28 @@ def difference_heatmap(running_avg_ps, running_avg_ps_baseline):
     plt.title(r'$p_{\pi_{entropy}} - p_{\pi_{random}}$')
     plt.savefig(fname)
     # plt.show()
+    
+def reward_vs_t(reward_at_t, epoch, i):
+    
+    plt.figure()
+    plt.plot(np.arange(len(reward_at_t)), reward_at_t)
+#     plt.legend(["Entropy", "Random"])
+    plt.xlabel("t")
+    plt.ylabel("Reward for step t")
+#     plt.title("Policy Entropy over Time")
+    
+    t_dir = FIG_DIR + model_time + 't_rewards/'
+    if not os.path.exists(t_dir):
+        os.makedirs(t_dir)
+    fname = t_dir + "epoch_%02d_%02d.png" % (epoch,i)
+    plt.savefig(fname)
+
+def percent_state_space_reached(pcts, pcts_baseline, ext=''):
+    plt.figure()
+    plt.plot(np.arange(len(pcts)), pcts)
+    plt.plot(np.arange(len(pcts_baseline)), pcts_baseline)
+    plt.xlabel("t")
+    plt.ylabel("Percent state space reached")
+    plt.legend(["MaxEnt", "Random"])
+    fname = FIG_DIR + model_time + '/pct_visited' + ext + '.png'
+    plt.savefig(fname)

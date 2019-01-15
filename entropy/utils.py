@@ -35,6 +35,8 @@ parser.add_argument('--save_models', action='store_true',
 parser.add_argument('--render', action='store_true',
                     help='render the environment')
 
+parser.add_argument('--deterministic', action='store_true',
+                    help='act deterministically in mixed policy')
 parser.add_argument('--gaussian', action='store_true',
                     help='reduce dimension with random gaussian')
 parser.add_argument('--reduce_dim', type=int, default=5, metavar='rd',
@@ -45,6 +47,8 @@ parser.add_argument('--max_sigma', action='store_true',
                     help='use max sigma approach in policy averaging')
 parser.add_argument('--grad_ent', action='store_true',
                     help='use original gradient of entropy rewards')
+parser.add_argument('--start_steps', type=int, default=10000, metavar='ss',
+                    help='start steps parameter')
 
 args = parser.parse_args()
 
