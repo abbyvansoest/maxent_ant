@@ -137,17 +137,29 @@ def heatmap(running_avg_p, avg_p, i):
 
 
 def heatmap4(running_avg_ps, running_avg_ps_baseline, indexes=[0,1,2,3]):
+#     for x in range(len(running_avg_ps)):
+#         for y in range(len(running_avg_ps)):
+#             print("-----")
+#             print(x)
+#             print(y)
+#             print(running_avg_ps[x] == running_avg_ps[y])
+#     for x in range(len(running_avg_ps_baseline)):
+#         for y in range(len(running_avg_ps_baseline)):
+#             print('------')
+#             print(x)
+#             print(y)
+#             print(running_avg_ps_baseline[x] ==running_avg_ps_baseline[y])
+
     plt.figure()
     row1 = [plt.subplot(241), plt.subplot(242), plt.subplot(243), plt.subplot(244)]
     row2 = [plt.subplot(245), plt.subplot(246), plt.subplot(247), plt.subplot(248)]
 
-    # min_value = np.min(np.ma.log(running_avg_ps))
-    # min_value_baseline = np.min(np.ma.log(running_avg_ps_baseline))
-    # min_value = np.minimum(min_value, min_value_baseline)
-
     # TODO: colorbar for the global figure
     idx = 0
+#     i_vals = np.arange(len(indexes))
     for epoch, ax in zip(indexes,row1):
+        print(epoch)
+        print(idx)
         min_value = np.min(np.ma.log(running_avg_ps[idx]))
         
         if min_value == 0:
@@ -195,19 +207,19 @@ def difference_heatmap(running_avg_ps, running_avg_ps_baseline):
     plt.close()
     # plt.show()
     
-def reward_vs_t(reward_at_t, epoch, i):
+def reward_vs_t(reward_at_t, epoch):
     
     plt.figure()
     plt.plot(np.arange(len(reward_at_t)), reward_at_t)
 #     plt.legend(["Entropy", "Random"])
     plt.xlabel("t")
-    plt.ylabel("Reward for step t")
-#     plt.title("Policy Entropy over Time")
+    plt.ylabel("Objetive function")
+#     plt.title("Objective function return for mixed policy")
     
     t_dir = FIG_DIR + model_time + 't_rewards/'
     if not os.path.exists(t_dir):
         os.makedirs(t_dir)
-    fname = t_dir + "epoch_%02d_%02d.png" % (epoch,i)
+    fname = t_dir + "epoch_%02d.png" % (epoch)
     plt.savefig(fname)
     plt.close()
 
@@ -218,6 +230,18 @@ def percent_state_space_reached(pcts, pcts_baseline, ext=''):
     plt.xlabel("t")
     plt.ylabel("Percent state space reached")
     plt.legend(["MaxEnt", "Random"])
-    fname = FIG_DIR + model_time + '/pct_visited' + ext + '.png'
+    fname = FIG_DIR + model_time + 'pct_visited' + ext + '.png'
+    plt.savefig(fname)
+    plt.close()
+    
+def states_visited_over_time(states_visited, epoch, ext=''):
+    plt.figure()
+    plt.plot(np.arange(len(states_visited)), states_visited)
+    plt.xlabel("t")
+    plt.ylabel("Number of unique states visited")
+    states_dir = FIG_DIR + model_time + 'states_visited' + ext + '/'
+    if not os.path.exists(states_dir):
+        os.makedirs(states_dir)
+    fname = states_dir + "epoch_%02d.png" % (epoch)
     plt.savefig(fname)
     plt.close()
