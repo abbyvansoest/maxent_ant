@@ -180,8 +180,8 @@ class AntSoftActorCritic:
 
     def test_agent(self, T, n=10, initial_state=[], store_log=True, deterministic=True, reset=False):
         
-        p = np.zeros(shape=(tuple(ant_utils.num_states)))
-        p_xy = np.zeros(shape=(tuple(ant_utils.num_states_2d)))
+#         p = np.zeros(shape=(tuple(ant_utils.num_states)))
+#         p_xy = np.zeros(shape=(tuple(ant_utils.num_states_2d)))
         
         denom = 0
 
@@ -201,10 +201,10 @@ class AntSoftActorCritic:
                 o, r, d, _ = self.test_env.step(a)
                 o = get_state(self.test_env, o)
                 
-                tup = tuple(ant_utils.discretize_state(o, self.normalization_factors))
-                p[tup] += 1
-                tup_xy = tuple(ant_utils.discretize_state_2d(o, self.normalization_factors))
-                p_xy[tup_xy] += 1
+#                 tup = tuple(ant_utils.discretize_state(o, self.normalization_factors))
+#                 p[tup] += 1
+#                 tup_xy = tuple(ant_utils.discretize_state_2d(o, self.normalization_factors))
+#                 p_xy[tup_xy] += 1
                 
                 r = self.reward(self.test_env, r, o)
                 ep_ret += r
@@ -220,10 +220,10 @@ class AntSoftActorCritic:
             if store_log:
                 self.logger.store(TestEpRet=ep_ret, TestEpLen=ep_len)
                 
-        p /= float(denom)
-        p_xy /= float(denom)
+#         p /= float(denom)
+#         p_xy /= float(denom)
         
-        return p, p_xy
+#         return p, p_xy
 
     def test_agent_random(self, T, normalization_factors=[], n=10):
         

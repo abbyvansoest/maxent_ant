@@ -12,7 +12,7 @@ import scipy.stats
 from scipy.interpolate import interp2d
 from scipy.interpolate import spline
 from scipy.stats import norm
-from scipy.stats import entropy
+# from scipy.stats import entropy
 from tabulate import tabulate
 import sys 
 
@@ -41,10 +41,15 @@ def get_state(env, obs):
 # run a simulation to see how the average policy behaves.
 def execute_average_policy(env, policies, T, reward_fn=[], norm=[], initial_state=[], n=10, render=False, epoch=0):
     
-#     buf = ExperienceBuffer()
     p = np.zeros(shape=(tuple(ant_utils.num_states)))
     p_xy = np.zeros(shape=(tuple(ant_utils.num_states_2d)))
-
+    
+    cumulative_states_visited = 0
+    states_visited = []
+    cumulative_states_visited_xy = 0
+    states_visited_xy = []
+    rewards = np.zeros(T)
+    
     random_initial_state = []
 
     denom = 0
@@ -65,18 +70,11 @@ def execute_average_policy(env, policies, T, reward_fn=[], norm=[], initial_stat
 
         random_T = np.floor(random.random()*T)
         random_initial_state = []
-        
-#         rewards = []
        
         for t in range(T):
             
             action = np.zeros(shape=(1,ant_utils.action_dim))
             
-            # average the mu
-            # take max sigma 
-#             if max_idx == 0 :
-#                 action = policies[0].get_action(obs, deterministic=True)
-#             el
             if args.max_sigma:
                 mu = np.zeros(shape=(1,ant_utils.action_dim))
                 sigma = np.zeros(shape=(1,ant_utils.action_dim))
@@ -95,12 +93,20 @@ def execute_average_policy(env, policies, T, reward_fn=[], norm=[], initial_stat
                 idx = random.randint(0, max_idx)
                 action = policies[idx].get_action(obs, deterministic=args.deterministic)
             
+            # Count the cumulative number of new states visited as a function of t.
             obs, _, done, _ = env.step(action)
             obs = get_state(env, obs)
-#             reward = reward_fn[tuple(ant_utils.discretize_state(obs, norm))]
-#             rewards.append(reward)
+            reward = reward_fn[tuple(ant_utils.discretize_state(obs, norm))]
+            rewards[t] += reward
 
-#             buf.store(obs)
+            # if this is the first time you are seeing this state, increment.
+            if p[tuple(ant_utils.discretize_state(obs, norm))] == 0:
+                cumulative_states_visited += 1
+            states_visited.append(cumulative_states_visited)
+            if p_xy[tuple(ant_utils.discretize_state_2d(obs, norm))]  == 0:
+                cumulative_states_visited_xy += 1
+            states_visited_xy.append(cumulative_states_visited_xy)
+
             p[tuple(ant_utils.discretize_state(obs, norm))] += 1
             p_xy[tuple(ant_utils.discretize_state_2d(obs, norm))] += 1
             denom += 1
@@ -111,22 +117,20 @@ def execute_average_policy(env, policies, T, reward_fn=[], norm=[], initial_stat
             if render:
                 env.render()
             if done:
-                # reset to most recent observation
-                env.reset()
+                env.reset() # TODO: reset to most recent xy location
 #                 qpos = obs[:len(ant_utils.qpos)]
 #                 qvel = obs[len(ant_utils.qpos):]
 #                 env.env.set_state(qpos, qvel)
                 
-#                 plotting.reward_vs_t(rewards, epoch, iteration)
-
     env.close()
+    rewards /= float(n)
+    plotting.reward_vs_t(rewards, epoch)
+    plotting.states_visited_over_time(states_visited, epoch)
+    plotting.states_visited_over_time(states_visited_xy, epoch, ext='_xy')
 
-#     buff_p = buf.get_discrete_distribution()
-#     buff_p_test_xy = buf.get_discrete_distribution_2d()
     p /= float(denom)
     p_xy /= float(denom)
 
-#     return buff_p, random_initial_state, buff_p_test_xy, buf.normalization_factors
     return p, p_xy, random_initial_state
 
 def grad_ent(pt):
@@ -143,6 +147,16 @@ def init_state(env):
     state = env.env.state_vector()
     return state
 
+def entropy(pt):
+    print("pt size %d" % pt.size)
+    # entropy = -sum(pt*log(pt))
+    entropy = 0.0
+    for p in pt:
+        if p == 0.0:
+            continue
+        entropy += p*np.log(p)
+    return -entropy
+
 # Main loop of maximum entropy program. WORKING HERE
 # Iteratively collect and learn T policies using policy gradients and a reward
 # function based on entropy.
@@ -154,8 +168,9 @@ def collect_entropy_policies(env, epochs, T, MODEL_DIR=''):
     direct = os.getcwd()+ '/data/'
     experiment_directory = direct + args.exp_name
     print(experiment_directory)
-    indexes = [0, 5, 10, 20]
-#     indexes=[0,1,2,3]
+    indexes = [0, 5, 10, 15]
+    if args.deterministic:
+        indexes = [1, 5, 10, 15]
 
     running_avg_p = np.zeros(shape=(tuple(ant_utils.num_states)))
     running_avg_p_xy = np.zeros(shape=(tuple(ant_utils.num_states_2d)))
@@ -204,6 +219,12 @@ def collect_entropy_policies(env, epochs, T, MODEL_DIR=''):
     v_x = ant_utils.discretize_value(0, ant_utils.state_bins[0])
     v_y = ant_utils.discretize_value(0, ant_utils.state_bins[1])
     reward_fn[tuple((v_x, v_y))] = 1
+#     reward_fn[tuple((v_x + 1, v_y))] = 1
+#     reward_fn[tuple((v_x, v_y + 1))] = 1
+#     reward_fn[tuple((v_x - 1, v_y))] = 1
+#     reward_fn[tuple((v_x, v_y - 1))] = 1
+#     reward_fn[tuple((v_x + 1, v_y + 1))] = 1
+#     reward_fn[tuple((v_x - 1, v_y - 1))] = 1
     
     print(reward_fn.shape)
     print(tuple(ant_utils.discretize_state(seed, normalization_factors)))
@@ -229,7 +250,6 @@ def collect_entropy_policies(env, epochs, T, MODEL_DIR=''):
             seed = args.seed
         else:
             seed = random.randint(1, 100000)
-        print(type(seed))
         sac = AntSoftActorCritic(lambda : gym.make(args.env), reward_fn=reward_fn, xid=i+1,
             seed=seed, gamma=args.gamma, 
             ac_kwargs=dict(hidden_sizes=[args.hid]*args.l),
@@ -241,13 +261,17 @@ def collect_entropy_policies(env, epochs, T, MODEL_DIR=''):
                               initial_state=initial_state, 
                               start_steps=args.start_steps) 
         policies.append(sac)
+        
+        # TODO:
+        # if you ever see a normalization factor that is larger than the one you have, replace
+        # and update normalization factors everywhere.
 
         # CHANGED DETERMNISTIC HERE
         # CHANGED ORDER OF BASELINE COLLECTION AND NORMALIZATION PARAMS
         # ADDED INITIAL STATE IN test_agent() and execute_average_policy()
-        print("Test trained policy...")
-        _, p_xy = sac.test_agent(T, initial_state=initial_state, deterministic=True, store_log=False, n=args.n, reset=True) # TODO: initial state seed?
-        _, p_xy_non_deterministic = sac.test_agent(T, initial_state=initial_state, deterministic=False, store_log=False, n=args.n, reset=True) # TODO: initial state seed?
+#         print("Test trained policy...")
+#         _, p_xy = sac.test_agent(T, initial_state=initial_state, deterministic=True, store_log=False, n=args.n, reset=True) # TODO: initial state seed?
+#         _, p_xy_non_deterministic = sac.test_agent(T, initial_state=initial_state, deterministic=False, store_log=False, n=args.n, reset=True) # TODO: initial state seed?
 
         # Execute the cumulative average policy thus far.
         # Estimate distribution and entropy.
@@ -270,20 +294,23 @@ def collect_entropy_policies(env, epochs, T, MODEL_DIR=''):
         
         # update reward function
         print("Update reward function")
+        eps = 1/np.sqrt(ant_utils.total_state_space)
         if args.cumulative:
             reward_fn = grad_ent(running_avg_p)
         else:
-            reward_fn = grad_ent(average_p)
+            reward_fn = 1.
+            average_p += eps
+            reward_fn /= average_p
         average_p = None # delete big array
         
         # (save for plotting)
         running_avg_entropies.append(running_avg_ent)
         if i in indexes:
             running_avg_ps_xy.append(np.copy(running_avg_p_xy))
-            print(len(running_avg_ps_xy))
 
         print("Collecting baseline experience....")
         p_baseline, p_baseline_xy = sac.test_agent_random(T, normalization_factors=normalization_factors, n=args.n)
+        print("Compute baseline entropy....")
         round_entropy_baseline = entropy(p_baseline.ravel())
         round_entropy_baseline_xy = entropy(p_baseline_xy.ravel())
 
@@ -303,7 +330,6 @@ def collect_entropy_policies(env, epochs, T, MODEL_DIR=''):
         running_avg_entropies_baseline.append(running_avg_ent_baseline)
         if i in indexes:
             running_avg_ps_baseline_xy.append(np.copy(running_avg_p_baseline_xy))
-            print(len(running_avg_ps_xy))
     
         print(average_p_xy)
         print(p_baseline_xy)
@@ -340,9 +366,7 @@ def collect_entropy_policies(env, epochs, T, MODEL_DIR=''):
         # Plot from round.
         plotting.heatmap(running_avg_p_xy, average_p_xy, i)
         plotting.heatmap1(running_avg_p_baseline_xy, i)
-        plotting.heatmap1(p_xy, i, directory='p')
-        plotting.heatmap1(p_xy_non_deterministic, i, directory='p_non_deterministic')
-    
+
     # cumulative plots.
     plotting.heatmap4(running_avg_ps_xy, running_avg_ps_baseline_xy, indexes)
     plotting.running_average_entropy(running_avg_entropies, running_avg_entropies_baseline)
