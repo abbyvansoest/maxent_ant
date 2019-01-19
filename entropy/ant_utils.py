@@ -28,39 +28,39 @@ import numpy as np
 import utils
 args = utils.get_args()
 
-env = gym.make('Ant-v2')
+env = gym.make(args.env)
 
 dim_dict = {
     0:"x",
     1:"y",
-    2:"z",
-    3:"x torso",
-    4:"y torso",
-    5:"z torso",
-    6:"w torso",
-    7:"joint 1 angle",
-    8:"joint 2 angle",
-    9:"joint 3 angle",
-    10:"joint 4 angle",
-    11:"joint 5 angle",
-    12:"joint 6 angle",
-    13:"joint 7 angle",
-    14:"joint 8 angle",
-    15:"3d veloity/angular velocity",
-    16:"3d veloity/angular velocity",
-    17:"3d veloity/angular velocity",
-    18:"3d veloity/angular velocity",
-    19:"3d veloity/angular velocity",
-    20:"3d veloity/angular velocity",
-    21:"3d veloity/angular velocity",
-    22:"3d veloity/angular velocity",
-    23:"joint velocity",
-    24:"joint velocity",
-    25:"joint velocity",
-    26:"joint velocity",
-    27:"joint velocity",
-    28:"joint velocity",
-    29:"joint velocity",
+    2:"z",      # have as special coordinates that you do not project. bin at appropriate value for these coordinates
+#     3:"x torso",
+#     4:"y torso",
+#     5:"z torso",
+#     6:"w torso",
+#     7:"joint 1 angle",
+#     8:"joint 2 angle",
+#     9:"joint 3 angle",
+#     10:"joint 4 angle",
+#     11:"joint 5 angle",
+#     12:"joint 6 angle",
+#     13:"joint 7 angle",
+#     14:"joint 8 angle",
+#     15:"3d veloity/angular velocity",
+#     16:"3d veloity/angular velocity",
+#     17:"3d veloity/angular velocity",
+#     18:"3d veloity/angular velocity",
+#     19:"3d veloity/angular velocity",
+#     20:"3d veloity/angular velocity",
+#     21:"3d veloity/angular velocity",
+#     22:"3d veloity/angular velocity",
+#     23:"joint velocity",
+#     24:"joint velocity",
+#     25:"joint velocity",
+#     26:"joint velocity",
+#     27:"joint velocity",
+#     28:"joint velocity",
+#     29:"joint velocity",
 }
 
 qpos = env.env.init_qpos
@@ -70,17 +70,40 @@ state_dim = int(env.env.state_vector().shape[0])
 action_dim = int(env.action_space.sample().shape[0])
 
 features = [2,7,8,9,10]
-min_bin = -3
-max_bin = 3
 height_bins = 20
-num_bins = 20
 
-start = 3
-stop = 5
-num_bins_full = 10
+min_bin = -1
+max_bin = 1
+num_bins = 15
+
+start = 0
+stop = 2
+
+special = [0,1]
+min_x, min_y = -10, -10
+max_x, max_y = 10, 10
+x_bins, y_bins = 16, 16
+
+min_bin_2d = -15
+max_bin_2d = 15
+num_bins_2d = 20
 
 reduce_dim = args.reduce_dim
-G = np.transpose(np.random.normal(0, 1, (state_dim, reduce_dim)))
+expected_state_dim = len(special) + reduce_dim
+G = np.transpose(np.random.normal(0, 1, (state_dim - len(special), reduce_dim)))
+
+total_state_space = x_bins*y_bins* (num_bins**reduce_dim)
+
+print("total_state_space = %d" % total_state_space)
+print("expected_state_dim = %d" % expected_state_dim)
+print("action_dim = %d" % action_dim)
+
+def convert_obs(observation):
+    new_obs = []
+    for i in special:
+        new_obs.append(observation[i])
+    new_obs = np.concatenate((new_obs, np.dot(G, observation[2:])))
+    return new_obs 
 
 def discretize_range(lower_bound, upper_bound, num_bins):
     return np.linspace(lower_bound, upper_bound, num_bins + 1)[1:-1]
@@ -104,16 +127,18 @@ def get_state_bins():
 
 def get_state_bins_reduced():
     state_bins = []
+    state_bins.append(discretize_range(min_x, max_x, x_bins))
+    state_bins.append(discretize_range(min_y, max_y, y_bins))
+    
     for i in range(reduce_dim):
         state_bins.append(discretize_range(min_bin, max_bin, num_bins))
     return state_bins
 
-def get_state_bins_full_state():
+def get_state_bins_2d_state():
     state_bins = []
     for i in range(start, stop):
-        state_bins.append(discretize_range(-3, 3, num_bins_full))
+        state_bins.append(discretize_range(min_bin_2d, max_bin_2d, num_bins_2d))
     return state_bins
-
 
 def get_num_states(state_bins):
     num_states = []
@@ -128,17 +153,16 @@ else:
     state_bins = get_state_bins()
 num_states = get_num_states(state_bins)
 
-state_bins_full = get_state_bins_full_state()
-num_states_full = tuple([num_bins_full for i in range(start, stop)])
+state_bins_2d = get_state_bins_2d_state()
+num_states_2d = tuple([num_bins_2d for i in range(start, stop)])
 
 # Discretize the observation features and reduce them to a single list.
-def discretize_state_full(observation):
+def discretize_state_2d(observation, norm=[]):
     state = []
     for i in range(start, stop):
         feature = observation[i]
-        state.append(discretize_value(feature, state_bins_full[i - start]))
+        state.append(discretize_value(feature, state_bins_2d[i - start]))
     return state
-# Goal: discretize the state 
 
 def discretize_state_normal(observation):
     state = []
@@ -147,19 +171,24 @@ def discretize_state_normal(observation):
     return state
 
 # Discretize the observation features and reduce them to a single list.
-def discretize_state_reduced(observation):
-    # print(observation)
-    observation = np.dot(G, observation)
-    # print(observation)
+def discretize_state_reduced(observation, norm=[]):
+    
+    if (len(observation) != expected_state_dim):
+        observation = convert_obs(observation)
+
+    if len(norm) > 0:
+        for i in range(len(observation)):
+            observation[i] = observation[i] / norm[i]
+
     state = []
     for i, feature in enumerate(observation):
         state.append(discretize_value(feature, state_bins[i]))
     return state
 
 # Discretize the observation features and reduce them to a single list.
-def discretize_state(observation):
+def discretize_state(observation, norm=[]):
     if args.gaussian:
-        state = discretize_state_reduced(observation)
+        state = discretize_state_reduced(observation, norm)
     else:
         state = discretize_state_normal(observation)
 

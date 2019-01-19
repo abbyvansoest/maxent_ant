@@ -4,17 +4,21 @@ import numpy as np
 import tensorflow as tf
 import gym
 import time
-from spinup.algos.sac import core
-from spinup.algos.sac.core import get_vars
+# from spinup.algos.sac import core
+# from spinup.algos.sac.core import get_vars
+import core
+from core import get_vars
 from spinup.utils.logx import EpochLogger
 
 import ant_utils
+from experience_buffer import ExperienceBuffer
 
-def get_state(env, obs, printme=False):
+def get_state(env, obs):
     state = env.env.state_vector()
-    if printme:
-        print("o = " + str(obs[:29]))
-        print("state = " + str(state))
+    if not np.array_equal(obs[:len(state) - 2], state[2:]):
+        print(obs)
+        print(state)
+        raise ValueError("state and observation are not equal")
     return state
 
 class ReplayBuffer:
@@ -23,11 +27,12 @@ class ReplayBuffer:
     """
 
     def __init__(self, obs_dim, act_dim, size):
+        print(obs_dim)
         self.obs1_buf = np.zeros([size, obs_dim], dtype=np.float32)
         self.obs2_buf = np.zeros([size, obs_dim], dtype=np.float32)
         self.acts_buf = np.zeros([size, act_dim], dtype=np.float32)
         self.rews_buf = np.zeros(size, dtype=np.float32)
-        self.done_buf = np.zeros(size, dtype=np.float32)
+        self.done_buf = np.zeros(size, dtype=np.float32)        
         self.ptr, self.size, self.max_size = 0, 0, size
 
     def store(self, obs, act, rew, next_obs, done):
@@ -36,9 +41,10 @@ class ReplayBuffer:
         self.acts_buf[self.ptr] = act
         self.rews_buf[self.ptr] = rew
         self.done_buf[self.ptr] = done
+        
         self.ptr = (self.ptr+1) % self.max_size
         self.size = min(self.size+1, self.max_size)
-
+        
     def sample_batch(self, batch_size=32):
         idxs = np.random.randint(0, self.size, size=batch_size)
         return dict(obs1=self.obs1_buf[idxs],
@@ -60,7 +66,7 @@ class AntSoftActorCritic:
 
     def __init__(self, env_fn, reward_fn=[], actor_critic=core.mlp_actor_critic, xid=0, seed=0, max_ep_len=1000,
         gamma=.99, alpha=0.2, lr=1e-3, polyak=0.995, replay_size=int(1e6), 
-        ac_kwargs=dict(), logger_kwargs=dict()):
+        ac_kwargs=dict(), logger_kwargs=dict(), normalization_factors=[], learn_reduced=False):
 
         tf.set_random_seed(seed)
         np.random.seed(seed)
@@ -69,13 +75,16 @@ class AntSoftActorCritic:
         self.target_scope = 'target' + str(xid)
 
         self.logger = EpochLogger(**logger_kwargs)
-        # self.logger.save_config(locals())
 
         self.max_ep_len = max_ep_len
-
         self.reward_fn = reward_fn
+        self.normalization_factors = normalization_factors
+        self.learn_reduced = learn_reduced
+        
         self.env, self.test_env = env_fn(), env_fn()
-        self.obs_dim = self.env.observation_space.shape[0]
+        self.obs_dim = len(self.env.env.state_vector())
+        if self.learn_reduced:
+            self.obs_dim = ant_utils.expected_state_dim
         self.act_dim = self.env.action_space.shape[0]
 
         # Action limit for clamping: critically, assumes all dimensions share the same bound!
@@ -92,11 +101,11 @@ class AntSoftActorCritic:
             # Main outputs from computation graph
             # with tf.device('/job:localhost/replica:0/task:0/device:GPU:2'):
             with tf.variable_scope(self.main_scope):
-                self.mu, self.pi, self.logp_pi, self.q1, self.q2, self.q1_pi, self.q2_pi, self.v = actor_critic(self.x_ph, self.a_ph, **ac_kwargs)
+                self.mu, self.pi, self.logp_pi, self.q1, self.q2, self.q1_pi, self.q2_pi, self.v, self.std = actor_critic(self.x_ph, self.a_ph, **ac_kwargs)
             
             # Target value network
             with tf.variable_scope(self.target_scope):
-                _, _, _, _, _, _, _, self.v_targ  = actor_critic(self.x2_ph, self.a_ph, **ac_kwargs)
+                _, _, _, _, _, _, _, self.v_targ, _  = actor_critic(self.x2_ph, self.a_ph, **ac_kwargs)
 
             # Experience buffer
             self.replay_buffer = ReplayBuffer(obs_dim=self.obs_dim, act_dim=self.act_dim, size=replay_size)
@@ -146,103 +155,120 @@ class AntSoftActorCritic:
             self.sess.run(target_init)
 
 
-    def reward(self, env, r, o, printme=False):
+    def reward(self, env, r, o):
         if len(self.reward_fn) == 0:
             return r
-
-        tup = tuple(ant_utils.discretize_state(get_state(env, o)))
         
-        if printme:
-            #print("o[0] = " + str(o[0]))
-            print("reward tup = " + str(tup) + "\treward = " + str(self.reward_fn[tup]))
-
-        # if printme:
-        #     print("orig: %f \t replace: %f" % (r, new_reward))
-
+        # use self.normalization_factors to normalize the state.
+        tup = tuple(ant_utils.discretize_state(o, self.normalization_factors))
         return self.reward_fn[tup]
 
-    def get_action(self, o, deterministic=False, sess=None):
+    def get_action(self, o, deterministic=False): 
+        if self.learn_reduced:
+            o = ant_utils.convert_obs(o)
         with self.graph.as_default():
             act_op = self.mu if deterministic else self.pi
-            if sess is not None:
-                return sess.run(act_op, feed_dict={self.x_ph: o.reshape(1,-1)})[0]
             action = self.sess.run(act_op, feed_dict={self.x_ph: o.reshape(1,-1)})[0]
-            # print(action)
             return action
+        
+    def get_sigma(self, o):
+        if self.learn_reduced:
+            o = ant_utils.convert_obs(o)
+        with self.graph.as_default():
+            return self.sess.run(self.std, feed_dict={self.x_ph: o.reshape(1,-1)})[0]
 
-    def test_agent(self, T, n=10, initial_state=[], sess=None, store_log=True, deterministic=True):
-        #global sess, mu, pi, q1, q2, q1_pi, q2_pi
-        p = np.zeros(shape=(tuple(ant_utils.num_states)))
-        p_full_dim = np.zeros(shape=(tuple(ant_utils.num_states_full)))
-
+    def test_agent(self, T, n=10, initial_state=[], store_log=True, deterministic=True, reset=False):
+        
+#         p = np.zeros(shape=(tuple(ant_utils.num_states)))
+#         p_xy = np.zeros(shape=(tuple(ant_utils.num_states_2d)))
+        
         denom = 0
 
         for j in range(n):
             o, r, d, ep_ret, ep_len = self.test_env.reset(), 0, False, 0, 0
-
+            
             if len(initial_state) > 0:
-                qpos = initial_state[:15]
-                qvel = initial_state[15:]
+                qpos = initial_state[:len(ant_utils.qpos)]
+                qvel = initial_state[len(ant_utils.qpos):]
                 self.test_env.env.set_state(qpos, qvel)
                 o = self.test_env.env._get_obs()
-
+            
+            o = get_state(self.test_env, o)
             while not(d or (ep_len == T)):
                 # Take deterministic actions at test time 
-                a = self.get_action(o, deterministic, sess)
-                #print("action = " + str(a))
+                a = self.get_action(o, deterministic)
                 o, r, d, _ = self.test_env.step(a)
-                # print("state = " + str(o))
-                tup = tuple(ant_utils.discretize_state(get_state(self.test_env, o, printme=False)))
-                # print("test_agent: tup = " + str(tup))               
-                p[tup] += 1
-                tup_full = tuple(ant_utils.discretize_state_full(get_state(self.test_env, o)))
-                p_full_dim[tup_full] += 1
+                o = get_state(self.test_env, o)
                 
-                r = self.reward(self.test_env, r, o, printme=False)
+#                 tup = tuple(ant_utils.discretize_state(o, self.normalization_factors))
+#                 p[tup] += 1
+#                 tup_xy = tuple(ant_utils.discretize_state_2d(o, self.normalization_factors))
+#                 p_xy[tup_xy] += 1
+                
+                r = self.reward(self.test_env, r, o)
                 ep_ret += r
                 ep_len += 1
                 denom += 1
-
-                #print("test_agent: tup = " + str(tup))
-                # print(self.reward_fn[tup])
-                # print(r)
-                # print(ep_ret)
+                
+                if d and reset:
+#                     self.test_env.reset()
+                    d = False
 
             if store_log:
                 self.logger.store(TestEpRet=ep_ret, TestEpLen=ep_len)
+                
+#         p /= float(denom)
+#         p_xy /= float(denom)
         
-        return p / float(denom), p_full_dim / float(denom)
+#         return p, p_xy
 
-    def test_agent_random(self, T, n=10):
-        # global sess, mu, pi, q1, q2, q1_pi, q2_pi
+    def test_agent_random(self, T, normalization_factors=[], n=10):
+        
         p = np.zeros(shape=(tuple(ant_utils.num_states)))
-        p_full_dim = np.zeros(shape=(tuple(ant_utils.num_states_full)))
+        p_xy = np.zeros(shape=(tuple(ant_utils.num_states_2d)))
+        
+        cumulative_states_visited_baseline = 0
+        states_visited_baseline = []
+        cumulative_states_visited_xy_baseline = 0
+        states_visited_xy_baseline = []
 
         denom = 0
 
         for j in range(n):
             o, r, d, ep_ret, ep_len = self.test_env.reset(), 0, False, 0, 0
+            o = get_state(self.test_env, o)
             while not(d or (ep_len == T)):
-                # Take deterministic actions at test time 
                 a = self.test_env.action_space.sample()
                 o, r, d, _ = self.test_env.step(a)
+                o = get_state(self.test_env, o)
                 r = self.reward(self.test_env, r, o)
-
-                p[tuple(ant_utils.discretize_state(get_state(self.test_env, o)))] += 1
-                tup_full = tuple(ant_utils.discretize_state_full(get_state(self.test_env, o)))
-                p_full_dim[tup_full] += 1
                 
-                ep_ret += r
-                ep_len += 1
+                # if this is the first time you are seeing this state, increment.
+                if p[tuple(ant_utils.discretize_state(o, normalization_factors))] == 0:
+                    cumulative_states_visited_baseline += 1
+                states_visited_baseline.append(cumulative_states_visited_baseline)
+                if p_xy[tuple(ant_utils.discretize_state_2d(o, normalization_factors))]  == 0:
+                    cumulative_states_visited_xy_baseline += 1
+                states_visited_xy_baseline.append(cumulative_states_visited_xy_baseline)
+                
+                p[tuple(ant_utils.discretize_state(o, normalization_factors))] += 1
+                p_xy[tuple(ant_utils.discretize_state_2d(o, normalization_factors))] += 1
+                
                 denom += 1
+                ep_len += 1
                 
-        return p / float(denom), p_full_dim / float(denom)
+                # CRITICAL: ignore done signal
+                if d:
+                    d = False
+        
+        p /= float(denom)
+        p_xy /= float(denom)
+        
+        return p, p_xy, states_visited_baseline, states_visited_xy_baseline
 
     def soft_actor_critic(self, initial_state=[], steps_per_epoch=5000, epochs=100,
             batch_size=100, start_steps=10000, save_freq=1):
-
-        p = np.zeros(shape=(tuple(ant_utils.num_states)))
-
+        
         with self.graph.as_default():
 
             # Count variables
@@ -258,10 +284,12 @@ class AntSoftActorCritic:
             start_time = time.time()
             o, r, d, ep_ret, ep_len = self.env.reset(), 0, False, 0, 0
             if len(initial_state) > 0:
-                qpos = initial_state[:15]
-                qvel = initial_state[15:]
-                self.test_env.env.set_state(qpos, qvel)
-                o = self.test_env.env._get_obs()
+                qpos = initial_state[:len(ant_utils.qpos)]
+                qvel = initial_state[len(ant_utils.qpos):]
+                self.env.env.set_state(qpos, qvel)
+                o = self.env.env._get_obs()
+            
+            o = get_state(self.env, o)
 
             total_steps = steps_per_epoch * epochs
 
@@ -274,24 +302,19 @@ class AntSoftActorCritic:
                 use the learned policy. 
                 """
                 if t > start_steps:
+                    if t == start_steps + 1:
+                        print("!!!! using policy !!!!")
                     a = self.get_action(o)
                 else:
                     a = self.env.action_space.sample()
 
                 # Step the env
-                #print("------------")
                 o2, r, d, _ = self.env.step(a)
-                # print("state = " + str(o2))
-                r = self.reward(self.env, r, o2, printme=False)
-
-                tup = tuple(ant_utils.discretize_state(get_state(self.env, o2)))
-                p[tup] += 1
-
+                o2 = get_state(self.env, o2)
+                r = self.reward(self.env, r, o2)
+                
                 ep_ret += r
                 ep_len += 1
-
-                # print(r)
-                # print(ep_ret)
 
                 # Ignore the "done" signal if it comes from hitting the time
                 # horizon (that is, when it's an artificial terminal signal
@@ -299,15 +322,16 @@ class AntSoftActorCritic:
                 d = False if ep_len == self.max_ep_len else d
 
                 # Store experience to replay buffer
-                self.replay_buffer.store(o, a, r, o2, d)
+                if self.learn_reduced:
+                    self.replay_buffer.store(ant_utils.convert_obs(o), 
+                                             a, r, ant_utils.convert_obs(o2), d)
+                else:
+                    self.replay_buffer.store(o, a, r, o2, d)
 
-                # Super critical: update most recent observation!
+                # Super critical: update most recent observation.
                 o = o2
 
                 if d or (ep_len == self.max_ep_len):
-
-                    # TODO for sparse representation: replace rewards in buffer with
-                    # calculated rewards from the experience (the observations collected)
 
                     """
                     Perform all SAC updates at the end of the trajectory.
@@ -315,7 +339,6 @@ class AntSoftActorCritic:
                     original paper.
                     """
                     for j in range(ep_len):
-                        # TODO: break into multiple GPUs?
                         batch = self.replay_buffer.sample_batch(batch_size)
                         feed_dict = {self.x_ph: batch['obs1'],
                                      self.x2_ph: batch['obs2'],
@@ -331,11 +354,11 @@ class AntSoftActorCritic:
                     self.logger.store(EpRet=ep_ret, EpLen=ep_len)
                     o, r, d, ep_ret, ep_len = self.env.reset(), 0, False, 0, 0
                     if len(initial_state) > 0:
-                        qpos = initial_state[:15]
-                        qvel = initial_state[15:]
-                        self.test_env.env.set_state(qpos, qvel)
-                        o = self.test_env.env._get_obs()
-                    # print("New trajectory")
+                        qpos = initial_state[:len(ant_utils.qpos)]
+                        qvel = initial_state[len(ant_utils.qpos):]
+                        self.env.env.set_state(qpos, qvel)
+                        o = self.env.env._get_obs()
+                    o = get_state(self.env, o)
 
                 # End of epoch wrap-up
                 if t > 0 and t % steps_per_epoch == 0:
@@ -359,11 +382,6 @@ class AntSoftActorCritic:
                     self.logger.log_tabular('LossQ2', average_only=True)
                     self.logger.log_tabular('LossV', average_only=True)
                     self.logger.dump_tabular()
-
-                    # print(p)
-                    # print(p[13])
-                    p = np.zeros(shape=(tuple(ant_utils.num_states)))
-
 
 
 if __name__ == '__main__':
