@@ -257,7 +257,7 @@ class AntSoftActorCritic:
                 denom += 1
                 ep_len += 1
                 
-                # ADDED
+                # CRITICAL: ignore done signal
                 if d:
                     d = False
         

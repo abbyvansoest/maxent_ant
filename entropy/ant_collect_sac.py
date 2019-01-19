@@ -119,22 +119,8 @@ def execute_average_policy(env, policies, T, reward_fn=[], norm=[], initial_stat
 
             if render:
                 env.render()
-            if done: # CRITICAL
+            if done: # CRITICAL: ignore done signal
                 done = False
-#                 obs2 = env.reset() # TODO: reset to most recent xy location?
-#                 obs2 = get_state(env, obs2)
-                
-#                 qpos = obs2[:len(ant_utils.qpos)]
-#                 qvel = obs2[len(ant_utils.qpos):]
-#                 qpos[0] = obs[0]
-#                 qpos[1] = obs[1]
-                
-#                 if max_idx == 0:
-#                     random_initial_state = obs
-#                     break
-#                 qpos = obs[:len(ant_utils.qpos)]
-#                 qvel = obs[len(ant_utils.qpos):]
-#                 env.env.set_state(qpos, qvel)
                 
     env.close()
     rewards /= float(n)
@@ -185,6 +171,7 @@ def collect_entropy_policies(env, epochs, T, MODEL_DIR=''):
         indexes = [1, 5, 10, 15]
     
     indexes = [1,5,10,15]
+#     indexes = [1,5,10,25]
 
     running_avg_p = np.zeros(shape=(tuple(ant_utils.num_states)))
     running_avg_p_xy = np.zeros(shape=(tuple(ant_utils.num_states_2d)))
