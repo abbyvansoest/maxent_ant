@@ -71,27 +71,32 @@ action_dim = int(env.action_space.sample().shape[0])
 
 features = [2,7,8,9,10]
 height_bins = 20
-min_bin = -1 # THIS CRITICAL
+
+min_bin = -1
 max_bin = 1
-num_bins = 10
+num_bins = 15
 
 start = 0
 stop = 2
 
 special = [0,1]
-min_x, min_y = -8, -8
-max_x, max_y = 8, 8
-x_bins, y_bins = 15, 15
+min_x, min_y = -10, -10
+max_x, max_y = 10, 10
+x_bins, y_bins = 16, 16
 
-min_bin_2d = -10
-max_bin_2d = 10
-num_bins_2d = 15
+min_bin_2d = -15
+max_bin_2d = 15
+num_bins_2d = 20
 
 reduce_dim = args.reduce_dim
 expected_state_dim = len(special) + reduce_dim
 G = np.transpose(np.random.normal(0, 1, (state_dim - len(special), reduce_dim)))
 
 total_state_space = x_bins*y_bins* (num_bins**reduce_dim)
+
+print("total_state_space = %d" % total_state_space)
+print("expected_state_dim = %d" % expected_state_dim)
+print("action_dim = %d" % action_dim)
 
 def convert_obs(observation):
     new_obs = []

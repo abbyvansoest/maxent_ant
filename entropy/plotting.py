@@ -29,14 +29,14 @@ def get_next_file(directory, model_time, ext, dot=".png"):
         i += 1
     return fname
 
-def running_average_entropy(running_avg_entropies, running_avg_entropies_baseline):
-    fname = get_next_file(FIG_DIR, model_time, "running_avg", ".png")
+def running_average_entropy(running_avg_entropies, running_avg_entropies_baseline, ext=''):
+    fname = get_next_file(FIG_DIR, model_time, "running_avg"+ext, ".png")
     plt.figure()
     plt.plot(np.arange(len(running_avg_entropies)), running_avg_entropies)
     plt.plot(np.arange(len(running_avg_entropies_baseline)), running_avg_entropies_baseline)
     plt.legend(["Entropy", "Random"])
     plt.xlabel("t")
-    plt.ylabel("Running average entropy of cumulative policy")
+    plt.ylabel("Running average entropy of mixed policy")
     plt.title("Policy Entropy over Time")
     plt.savefig(fname)
     plt.close()
@@ -136,27 +136,13 @@ def heatmap(running_avg_p, avg_p, i):
     plt.close()
 
 
-def heatmap4(running_avg_ps, running_avg_ps_baseline, indexes=[0,1,2,3]):
-#     for x in range(len(running_avg_ps)):
-#         for y in range(len(running_avg_ps)):
-#             print("-----")
-#             print(x)
-#             print(y)
-#             print(running_avg_ps[x] == running_avg_ps[y])
-#     for x in range(len(running_avg_ps_baseline)):
-#         for y in range(len(running_avg_ps_baseline)):
-#             print('------')
-#             print(x)
-#             print(y)
-#             print(running_avg_ps_baseline[x] ==running_avg_ps_baseline[y])
-
+def heatmap4(running_avg_ps, running_avg_ps_baseline, indexes=[0,1,2,3], ext=''):
+    
     plt.figure()
     row1 = [plt.subplot(241), plt.subplot(242), plt.subplot(243), plt.subplot(244)]
     row2 = [plt.subplot(245), plt.subplot(246), plt.subplot(247), plt.subplot(248)]
-
-    # TODO: colorbar for the global figure
+    
     idx = 0
-#     i_vals = np.arange(len(indexes))
     for epoch, ax in zip(indexes,row1):
         print(epoch)
         print(idx)
@@ -183,29 +169,9 @@ def heatmap4(running_avg_ps, running_avg_ps_baseline, indexes=[0,1,2,3]):
         idx += 1
 
     plt.tight_layout()
-    fname = get_next_file(FIG_DIR, model_time, "time_heatmaps", ".png")
+    fname = get_next_file(FIG_DIR, model_time, ext+"_heatmaps", ".png")
     plt.savefig(fname)
     plt.close()
-    # plt.colorbar()
-    # plt.show()
-
-def difference_heatmap(running_avg_ps, running_avg_ps_baseline):
-
-    fname = get_next_file(FIG_DIR, model_time, "heatmap", ".png")
-    entropy_p = running_avg_ps[len(running_avg_ps) - 1]
-    random_p = running_avg_ps_baseline[len(running_avg_ps_baseline) - 1]
-
-    plt.figure()
-    diff_map = entropy_p - random_p
-
-    # normalize so 0 is grey.
-    max_p = max(abs(np.min(diff_map)), np.max(diff_map))
-    plt.imshow(diff_map, vmin=-max_p, vmax=max_p, interpolation='spline16', cmap='coolwarm')
-    plt.colorbar()
-    plt.title(r'$p_{\pi_{entropy}} - p_{\pi_{random}}$')
-    plt.savefig(fname)
-    plt.close()
-    # plt.show()
     
 def reward_vs_t(reward_at_t, epoch):
     
@@ -228,15 +194,17 @@ def percent_state_space_reached(pcts, pcts_baseline, ext=''):
     plt.plot(np.arange(len(pcts)), pcts)
     plt.plot(np.arange(len(pcts_baseline)), pcts_baseline)
     plt.xlabel("t")
-    plt.ylabel("Percent state space reached")
+    plt.ylabel("Fraction of state space reached")
     plt.legend(["MaxEnt", "Random"])
     fname = FIG_DIR + model_time + 'pct_visited' + ext + '.png'
     plt.savefig(fname)
     plt.close()
     
-def states_visited_over_time(states_visited, epoch, ext=''):
+def states_visited_over_time(states_visited, states_visited_baseline, epoch, ext=''):
     plt.figure()
     plt.plot(np.arange(len(states_visited)), states_visited)
+    plt.plot(np.arange(len(states_visited_baseline)), states_visited_baseline)
+    plt.legend(["Entropy", "Random"])
     plt.xlabel("t")
     plt.ylabel("Number of unique states visited")
     states_dir = FIG_DIR + model_time + 'states_visited' + ext + '/'

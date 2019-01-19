@@ -82,7 +82,6 @@ class AntSoftActorCritic:
         self.learn_reduced = learn_reduced
         
         self.env, self.test_env = env_fn(), env_fn()
-#         self.obs_dim = self.env.observation_space.shape[0]
         self.obs_dim = len(self.env.env.state_vector())
         if self.learn_reduced:
             self.obs_dim = ant_utils.expected_state_dim
@@ -212,9 +211,7 @@ class AntSoftActorCritic:
                 denom += 1
                 
                 if d and reset:
-                    self.test_env.reset()
-                    # Question: reset to most recent x,y location,
-                    # everything else normal?
+#                     self.test_env.reset()
                     d = False
 
             if store_log:
@@ -229,6 +226,11 @@ class AntSoftActorCritic:
         
         p = np.zeros(shape=(tuple(ant_utils.num_states)))
         p_xy = np.zeros(shape=(tuple(ant_utils.num_states_2d)))
+        
+        cumulative_states_visited_baseline = 0
+        states_visited_baseline = []
+        cumulative_states_visited_xy_baseline = 0
+        states_visited_xy_baseline = []
 
         denom = 0
 
@@ -241,23 +243,32 @@ class AntSoftActorCritic:
                 o = get_state(self.test_env, o)
                 r = self.reward(self.test_env, r, o)
                 
-                tup = tuple(ant_utils.discretize_state(o, normalization_factors))
-                p[tup] += 1
-                tup_xy = tuple(ant_utils.discretize_state_2d(o, normalization_factors))
-                p_xy[tup_xy] += 1
+                # if this is the first time you are seeing this state, increment.
+                if p[tuple(ant_utils.discretize_state(o, normalization_factors))] == 0:
+                    cumulative_states_visited_baseline += 1
+                states_visited_baseline.append(cumulative_states_visited_baseline)
+                if p_xy[tuple(ant_utils.discretize_state_2d(o, normalization_factors))]  == 0:
+                    cumulative_states_visited_xy_baseline += 1
+                states_visited_xy_baseline.append(cumulative_states_visited_xy_baseline)
+                
+                p[tuple(ant_utils.discretize_state(o, normalization_factors))] += 1
+                p_xy[tuple(ant_utils.discretize_state_2d(o, normalization_factors))] += 1
                 
                 denom += 1
+                ep_len += 1
+                
+                # ADDED
+                if d:
+                    d = False
         
         p /= float(denom)
         p_xy /= float(denom)
         
-        return p, p_xy
+        return p, p_xy, states_visited_baseline, states_visited_xy_baseline
 
     def soft_actor_critic(self, initial_state=[], steps_per_epoch=5000, epochs=100,
             batch_size=100, start_steps=10000, save_freq=1):
         
-        # TODO: play with start_steps
-
         with self.graph.as_default():
 
             # Count variables
@@ -321,9 +332,6 @@ class AntSoftActorCritic:
                 o = o2
 
                 if d or (ep_len == self.max_ep_len):
-
-                    # TODO for sparse representation: replace rewards in buffer with
-                    # calculated rewards from the experience (the observations collected)
 
                     """
                     Perform all SAC updates at the end of the trajectory.
