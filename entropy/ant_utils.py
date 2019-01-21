@@ -34,33 +34,6 @@ dim_dict = {
     0:"x",
     1:"y",
     2:"z",      # have as special coordinates that you do not project. bin at appropriate value for these coordinates
-#     3:"x torso",
-#     4:"y torso",
-#     5:"z torso",
-#     6:"w torso",
-#     7:"joint 1 angle",
-#     8:"joint 2 angle",
-#     9:"joint 3 angle",
-#     10:"joint 4 angle",
-#     11:"joint 5 angle",
-#     12:"joint 6 angle",
-#     13:"joint 7 angle",
-#     14:"joint 8 angle",
-#     15:"3d veloity/angular velocity",
-#     16:"3d veloity/angular velocity",
-#     17:"3d veloity/angular velocity",
-#     18:"3d veloity/angular velocity",
-#     19:"3d veloity/angular velocity",
-#     20:"3d veloity/angular velocity",
-#     21:"3d veloity/angular velocity",
-#     22:"3d veloity/angular velocity",
-#     23:"joint velocity",
-#     24:"joint velocity",
-#     25:"joint velocity",
-#     26:"joint velocity",
-#     27:"joint velocity",
-#     28:"joint velocity",
-#     29:"joint velocity",
 }
 
 qpos = env.env.init_qpos
@@ -80,12 +53,12 @@ start = 0
 stop = 2
 
 special = [0,1]
-min_x, min_y = -10, -10
-max_x, max_y = 10, 10
+min_x, min_y = -12, -12
+max_x, max_y = 12, 12
 x_bins, y_bins = 16, 16
 
-min_bin_2d = -15
-max_bin_2d = 15
+min_bin_2d = -20
+max_bin_2d = 20
 num_bins_2d = 20
 
 reduce_dim = args.reduce_dim

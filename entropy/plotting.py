@@ -12,6 +12,7 @@ matplotlib.use('Agg') # matplotlib.use('TkAgg')
 import matplotlib.pyplot as plt
 import matplotlib.mlab as mlab
 from mpl_toolkits.mplot3d import Axes3D
+from matplotlib.collections import LineCollection
 
 import utils
 import ant_utils
@@ -34,22 +35,9 @@ def running_average_entropy(running_avg_entropies, running_avg_entropies_baselin
     plt.figure()
     plt.plot(np.arange(len(running_avg_entropies)), running_avg_entropies)
     plt.plot(np.arange(len(running_avg_entropies_baseline)), running_avg_entropies_baseline)
-    plt.legend(["Entropy", "Random"])
-    plt.xlabel("t")
-    plt.ylabel("Running average entropy of mixed policy")
-    plt.title("Policy Entropy over Time")
-    plt.savefig(fname)
-    plt.close()
-
-def running_average_entropy_window(window_running_avg_ents, window_running_avg_ents_baseline, window):
-    fname = get_next_file(FIG_DIR, model_time, "running_avg_window", ".png")
-    plt.figure()
-    plt.plot(np.arange(len(window_running_avg_ents)), window_running_avg_ents)
-    plt.plot(np.arange(len(window_running_avg_ents_baseline)), window_running_avg_ents_baseline)
-    plt.legend(["Entropy", "Random"])
-    plt.xlabel("t")
-    plt.ylabel("Running avg entropy")
-    plt.title("Policy entropy over time, window = %d" % window)
+    plt.legend(["MaxEnt agent", "Random policy"])
+    plt.xlabel("Number of epochs")
+    plt.ylabel("Policy Entropy")
     plt.savefig(fname)
     plt.close()
 
@@ -177,10 +165,8 @@ def reward_vs_t(reward_at_t, epoch):
     
     plt.figure()
     plt.plot(np.arange(len(reward_at_t)), reward_at_t)
-#     plt.legend(["Entropy", "Random"])
     plt.xlabel("t")
     plt.ylabel("Objetive function")
-#     plt.title("Objective function return for mixed policy")
     
     t_dir = FIG_DIR + model_time + 't_rewards/'
     if not os.path.exists(t_dir):
@@ -193,9 +179,9 @@ def percent_state_space_reached(pcts, pcts_baseline, ext=''):
     plt.figure()
     plt.plot(np.arange(len(pcts)), pcts)
     plt.plot(np.arange(len(pcts_baseline)), pcts_baseline)
-    plt.xlabel("t")
+    plt.xlabel("Steps taken")
     plt.ylabel("Fraction of state space reached")
-    plt.legend(["MaxEnt", "Random"])
+    plt.legend(["MaxEnt agent", "Random agent"])
     fname = FIG_DIR + model_time + 'pct_visited' + ext + '.png'
     plt.savefig(fname)
     plt.close()
@@ -204,12 +190,47 @@ def states_visited_over_time(states_visited, states_visited_baseline, epoch, ext
     plt.figure()
     plt.plot(np.arange(len(states_visited)), states_visited)
     plt.plot(np.arange(len(states_visited_baseline)), states_visited_baseline)
-    plt.legend(["Entropy", "Random"])
-    plt.xlabel("t")
-    plt.ylabel("Number of unique states visited")
+    plt.legend(["MaxEnt agent", "Random agent"])
+    plt.xlabel("Steps taken")
+    plt.ylabel("Unique states visited")
     states_dir = FIG_DIR + model_time + 'states_visited' + ext + '/'
     if not os.path.exists(states_dir):
         os.makedirs(states_dir)
     fname = states_dir + "epoch_%02d.png" % (epoch)
+    plt.savefig(fname)
+    plt.close()
+    
+def states_visited_over_time_multi(states_visited, states_visited_baseline, epochs, ext=''):
+    
+    fig = plt.figure()
+    
+    x_og = np.arange(len(states_visited[0]))
+    
+    colors = ['C0:','C0--','C0-.','C0-']
+    lines = []
+    for sv, c in zip(states_visited, colors):
+        line = plt.plot(x_og, sv, c)[0]
+        lines.append(line)
+        
+    baseline_colors = ['C1:','C1--','C1-.','C1-']
+    for svb, c in zip(states_visited_baseline, baseline_colors):
+        line = plt.plot(x_og, svb, c)[0]
+        lines.append(line)
+    
+    for epoch, line in zip(epochs, lines[:len(epochs)]):
+        x = line.get_xdata()[-1]
+        y = line.get_ydata()[-1]
+        line.axes.annotate('Epoch %d' % epoch, xy=(1,y),
+                           xytext=(6,0),
+                           color=line.get_color(), 
+                           xycoords = line.axes.get_yaxis_transform(), 
+                           textcoords="offset points",
+                           size=10, va='center')
+        
+    plt.legend((lines[3], lines[7]),("MaxEnt", "Random"))
+    plt.xlabel("Steps taken")
+    plt.ylabel("Unique states visited")
+    
+    fname = FIG_DIR + model_time + "cumulative_visited.png" 
     plt.savefig(fname)
     plt.close()

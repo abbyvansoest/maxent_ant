@@ -12,7 +12,6 @@ import scipy.stats
 from scipy.interpolate import interp2d
 from scipy.interpolate import spline
 from scipy.stats import norm
-# from scipy.stats import entropy
 from tabulate import tabulate
 import sys 
 
@@ -37,6 +36,54 @@ def get_state(env, obs):
         print(state)
         raise ValueError("state and observation are not equal")
     return state
+
+def compute_states_visited_xy(env, policies, T, n, N=20, initial_state=[], baseline=False):
+    
+    states_visited_xy = np.zeros(T*n)
+    max_idx = len(policies) - 1
+    
+    for it in range(N): 
+        
+        p_xy = np.zeros(shape=(tuple(ant_utils.num_states_2d))) 
+        cumulative_states_visited_xy = 0
+        
+        # average results over n rollouts
+        for iteration in range(n):
+
+            env.reset()
+            if len(initial_state) > 0:
+                qpos = initial_state[:len(ant_utils.qpos)]
+                qvel = initial_state[len(ant_utils.qpos):]
+                env.env.set_state(qpos, qvel)
+            obs = get_state(env, env.env._get_obs())
+
+            for t in range(T):
+                action = np.zeros(shape=(1,ant_utils.action_dim))
+                idx = random.randint(0, max_idx)
+                
+                if idx == 0 or baseline:
+                    action = env.action_space.sample()
+                else:
+                    action = policies[idx].get_action(obs, deterministic=args.deterministic)
+
+                # Count the cumulative number of new states visited as a function of t.
+                obs, _, done, _ = env.step(action)
+                obs = get_state(env, obs)
+
+                # if this is the first time you are seeing this state, increment.
+                if p_xy[tuple(ant_utils.discretize_state_2d(obs, norm))]  == 0:
+                    cumulative_states_visited_xy += 1
+                
+                step = iteration*T + t
+                states_visited_xy[step] += cumulative_states_visited_xy
+                p_xy[tuple(ant_utils.discretize_state_2d(obs, norm))] += 1
+
+                if done: # CRITICAL: ignore done signal
+                    done = False
+                
+    env.close()
+    states_visited_xy /= float(N)
+    return states_visited_xy
 
 # run a simulation to see how the average policy behaves.
 def execute_average_policy(env, policies, T, reward_fn=[], norm=[], initial_state=[], n=10, render=False, epoch=0):
@@ -166,12 +213,12 @@ def collect_entropy_policies(env, epochs, T, MODEL_DIR=''):
     direct = os.getcwd()+ '/data/'
     experiment_directory = direct + args.exp_name
     print(experiment_directory)
-    indexes = [0, 5, 10, 15]
-    if args.deterministic:
-        indexes = [1, 5, 10, 15]
     
-    indexes = [1,5,10,15]
-#     indexes = [1,5,10,25]
+    indexes = [1,5,10,25]
+    states_visited_indexes = [0,5,10,15]
+    
+    states_visited_cumulative = []
+    states_visited_cumulative_baseline = []
 
     running_avg_p = np.zeros(shape=(tuple(ant_utils.num_states)))
     running_avg_p_xy = np.zeros(shape=(tuple(ant_utils.num_states_2d)))
@@ -260,7 +307,10 @@ def collect_entropy_policies(env, epochs, T, MODEL_DIR=''):
         # Estimate distribution and entropy.
         print("Executing mixed policy...")
         average_p, average_p_xy, initial_state, states_visited, states_visited_xy = \
-            execute_average_policy(env, policies, T, reward_fn=reward_fn, norm=normalization_factors, initial_state=initial_state, n=args.n, render=False, epoch=i)
+            execute_average_policy(env, policies, T, 
+                                   reward_fn=reward_fn, norm=normalization_factors, 
+                                   initial_state=initial_state, n=args.n, 
+                                   render=False, epoch=i)
         
         print("Calculating maxEnt entropy...")
         round_entropy = entropy(average_p.ravel())
@@ -270,9 +320,9 @@ def collect_entropy_policies(env, epochs, T, MODEL_DIR=''):
         print("Updating maxEnt running averages...")
         running_avg_ent = running_avg_ent * (i)/float(i+1) + round_entropy/float(i+1)
         running_avg_ent_xy = running_avg_ent_xy * (i)/float(i+1) + round_entropy_xy/float(i+1)
-        running_avg_p *= (i)/float(i+1) 
+        running_avg_p *= (i)/float(i+1)
         running_avg_p += average_p/float(i+1)
-        running_avg_p_xy *= (i)/float(i+1) 
+        running_avg_p_xy *= (i)/float(i+1)
         running_avg_p_xy += average_p_xy/float(i+1)
         
         # update reward function
@@ -304,6 +354,19 @@ def collect_entropy_policies(env, epochs, T, MODEL_DIR=''):
         
         plotting.states_visited_over_time(states_visited, states_visited_baseline, i)
         plotting.states_visited_over_time(states_visited_xy, states_visited_xy_baseline, i, ext='_xy')
+        
+        # save for cumulative plot.
+        if i in states_visited_indexes:
+            # average over a whole bunch of rollouts
+            # slow: so only do this when needed.
+            print("Averaging unique xy states visited....")
+            states_visited_xy = compute_states_visited_xy(env, policies, T=T, n=args.n, N=20)
+            states_visited_xy_baseline = compute_states_visited_xy(env, policies, 
+                                                                   T=T, n=args.n, N=20, 
+                                                                   initial_state=initial_state, 
+                                                                   baseline=True)
+            states_visited_cumulative.append(states_visited_xy)
+            states_visited_cumulative_baseline.append(states_visited_xy_baseline)
 
         print("Compute baseline entropy....")
         round_entropy_baseline = entropy(p_baseline.ravel())
@@ -362,7 +425,12 @@ def collect_entropy_policies(env, epochs, T, MODEL_DIR=''):
         # Plot from round.
         plotting.heatmap(running_avg_p_xy, average_p_xy, i)
         plotting.heatmap1(running_avg_p_baseline_xy, i)
-
+        
+        if i == states_visited_indexes[3]:
+             plotting.states_visited_over_time_multi(states_visited_cumulative, 
+                                                     states_visited_cumulative_baseline, 
+                                                     states_visited_indexes)
+        
     # cumulative plots.
     plotting.heatmap4(running_avg_ps_xy, running_avg_ps_baseline_xy, indexes, ext="cumulative")
     plotting.heatmap4(avg_ps_xy, avg_ps_baseline_xy, indexes, ext="epoch")
