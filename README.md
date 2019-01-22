@@ -7,3 +7,6 @@ Entropy-based exploration is a new algorithm to encourage efficient discovery of
 Note that this code is memory-intensive. It is set up to run on a specialized deep-learning machine. To reduce the dimensionality, change the discretization setup in ant_utils.py.
 
 Dependencies: Tensoflow, OpenAI Gym/Mujoco license, matplotlib, numpy, OpenAI SpinningUp, scipy
+
+Commands to recreate:
+python ant_collect_sac.py --env="Ant-v2" --T=10000 --epochs=26 --episodes=30 --gaussian --exp_name=ant_experiment --reduce_dim=5 --n=10 --l=2 --avg_N=10

@@ -43,6 +43,7 @@ def compute_states_visited_xy(env, policies, T, n, N=20, initial_state=[], basel
     max_idx = len(policies) - 1
     
     for it in range(N): 
+        print(it)
         
         p_xy = np.zeros(shape=(tuple(ant_utils.num_states_2d))) 
         cumulative_states_visited_xy = 0
@@ -214,7 +215,7 @@ def collect_entropy_policies(env, epochs, T, MODEL_DIR=''):
     experiment_directory = direct + args.exp_name
     print(experiment_directory)
     
-    indexes = [1,5,10,25]
+    indexes = [1,5,10,15]
     states_visited_indexes = [0,5,10,15]
     
     states_visited_cumulative = []
@@ -360,9 +361,9 @@ def collect_entropy_policies(env, epochs, T, MODEL_DIR=''):
             # average over a whole bunch of rollouts
             # slow: so only do this when needed.
             print("Averaging unique xy states visited....")
-            states_visited_xy = compute_states_visited_xy(env, policies, T=T, n=args.n, N=20)
+            states_visited_xy = compute_states_visited_xy(env, policies, T=T, n=args.n, N=args.avg_N)
             states_visited_xy_baseline = compute_states_visited_xy(env, policies, 
-                                                                   T=T, n=args.n, N=20, 
+                                                                   T=T, n=args.n, N=args.avg_N, 
                                                                    initial_state=initial_state, 
                                                                    baseline=True)
             states_visited_cumulative.append(states_visited_xy)
