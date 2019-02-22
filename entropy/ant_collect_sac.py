@@ -2,6 +2,9 @@
 
 # python ant_collect_sac.py --env="Ant-v2" --T=1000 --episodes=100 --epochs=10 
 
+import sys
+sys.path.append('/home/abby/autoencoder')
+
 import os
 import time
 from datetime import datetime
@@ -16,7 +19,6 @@ from tabulate import tabulate
 import sys 
 
 import gym
-from gym.spaces import prng
 import tensorflow as tf
 
 import utils
@@ -24,10 +26,12 @@ import ant_utils
 import plotting
 from ant_soft_actor_critic import AntSoftActorCritic
 from experience_buffer import ExperienceBuffer
+from autoencoder import Autoencoder
 
 args = utils.get_args()
 
 from spinup.utils.run_utils import setup_logger_kwargs
+
 
 def get_state(env, obs):
     state = env.env.state_vector()
@@ -85,6 +89,33 @@ def compute_states_visited_xy(env, policies, T, n, N=20, initial_state=[], basel
     env.close()
     states_visited_xy /= float(N)
     return states_visited_xy
+
+# run a simulation to see how the average policy behaves.
+def collect_avg_obs(env, policies, T, n=10):
+    data = []
+    max_idx = len(policies) - 1
+    
+    for iteration in range(n):        
+        env.reset()
+        obs = get_state(env, env.env._get_obs())
+       
+        for t in range(T):
+            action = np.zeros(shape=(1,ant_utils.action_dim))
+            
+            # select random policy uniform distribution
+            # take non-deterministic action for that policy
+            idx = random.randint(0, max_idx)
+            if idx == 0:
+                action = env.action_space.sample()
+            else:
+                action = policies[idx].get_action(obs, deterministic=args.deterministic)
+                
+            # Count the cumulative number of new states visited as a function of t.
+            obs, _, done, _ = env.step(action)
+            data.append(env.env.state_vector())
+            obs = get_state(env, obs)
+    
+    return data
 
 # run a simulation to see how the average policy behaves.
 def execute_average_policy(env, policies, T, reward_fn=[], norm=[], initial_state=[], n=10, render=False, epoch=0):
@@ -255,14 +286,15 @@ def collect_entropy_policies(env, epochs, T, MODEL_DIR=''):
         action = env.action_space.sample()
         obs, reward, done, _ = env.step(action)
         prebuf.store(get_state(env, obs))
-        
         if done:
             env.reset()
             done = False
             
     prebuf.normalize()
     normalization_factors = prebuf.normalization_factors
+    full_normalization_factors = prebuf.full_normalization_factors
     print(normalization_factors)
+    print(full_normalization_factors)
     prebuf = None
 
     reward_fn = np.zeros(shape=(tuple(ant_utils.num_states)))
@@ -313,6 +345,12 @@ def collect_entropy_policies(env, epochs, T, MODEL_DIR=''):
                                    initial_state=initial_state, n=args.n, 
                                    render=False, epoch=i)
         
+        print("Learning autoencoding....")
+        autoencoder = Autoencoder(ant_utils.state_dim, reduce_dim=args.autoencoder_reduce_dim, norm=full_normalization_factors)
+        autoencoder.set_data(collect_avg_obs(env, policies, T, n=20))
+        autoencoder.set_test_data(collect_avg_obs(env, policies, T, n=2))
+        autoencoder.train()
+        
         print("Calculating maxEnt entropy...")
         round_entropy = entropy(average_p.ravel())
         round_entropy_xy = entropy(average_p_xy.ravel())
@@ -357,17 +395,17 @@ def collect_entropy_policies(env, epochs, T, MODEL_DIR=''):
         plotting.states_visited_over_time(states_visited_xy, states_visited_xy_baseline, i, ext='_xy')
         
         # save for cumulative plot.
-        if i in states_visited_indexes:
-            # average over a whole bunch of rollouts
-            # slow: so only do this when needed.
-            print("Averaging unique xy states visited....")
-            states_visited_xy = compute_states_visited_xy(env, policies, T=T, n=args.n, N=args.avg_N)
-            states_visited_xy_baseline = compute_states_visited_xy(env, policies, 
-                                                                   T=T, n=args.n, N=args.avg_N, 
-                                                                   initial_state=initial_state, 
-                                                                   baseline=True)
-            states_visited_cumulative.append(states_visited_xy)
-            states_visited_cumulative_baseline.append(states_visited_xy_baseline)
+#         if i in states_visited_indexes:
+#             # average over a whole bunch of rollouts
+#             # slow: so only do this when needed.
+#             print("Averaging unique xy states visited....")
+#             states_visited_xy = compute_states_visited_xy(env, policies, T=T, n=args.n, N=args.avg_N)
+#             states_visited_xy_baseline = compute_states_visited_xy(env, policies, 
+#                                                                    T=T, n=args.n, N=args.avg_N, 
+#                                                                    initial_state=initial_state, 
+#                                                                    baseline=True)
+#             states_visited_cumulative.append(states_visited_xy)
+#             states_visited_cumulative_baseline.append(states_visited_xy_baseline)
 
         print("Compute baseline entropy....")
         round_entropy_baseline = entropy(p_baseline.ravel())
@@ -450,8 +488,7 @@ def main():
     # Make environment.
     env = gym.make(args.env)
     env.seed(int(time.time())) # seed environment
-    prng.seed(int(time.time())) # seed action space
-    
+
     TIME = datetime.now().strftime('%Y_%m_%d-%H-%M')
     plotting.FIG_DIR = 'figs/' + args.env + '/'
     plotting.model_time = args.exp_name + '/'

@@ -57,6 +57,9 @@ parser.add_argument('--start_steps', type=int, default=10000, metavar='ss',
 parser.add_argument('--initial_state', action='store_true',
                     help='seed learning policies with initial state')
 
+parser.add_argument('--autoencoder_reduce_dim', type=int, default=6, metavar='ard',
+                    help='reduction dimension for autoencoding')
+
 args = parser.parse_args()
 
 

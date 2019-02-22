@@ -5,8 +5,12 @@ import time
 class ExperienceBuffer:
     
     def __init__(self):
+        self.full_buffer = []
+        self.full_normalization_factors = []
+        
         self.buffer = []
         self.normalization_factors = []
+        
         self.normalized = False
         self.p = None
         self.p_2d = None
@@ -15,6 +19,7 @@ class ExperienceBuffer:
         if self.normalized:
             raise ValueError("ERROR! Do not store in buffer after normalizing.")
         # TODO: check dimension of obs: should be dimension of ant env.env.state_vector()
+        self.full_buffer.append(state)
         self.buffer.append(ant_utils.convert_obs(state))
     
     def normalize(self):
@@ -34,9 +39,17 @@ class ExperienceBuffer:
             for obs in self.buffer:
                 obs[i] = obs[i]/max_i_val
         
+        # normalize full state.
+        for i in range(ant_utils.state_dim):
+            i_vals = [x[i] for x in self.full_buffer]
+            max_i_val = max(i_vals)
+            self.full_normalization_factors.append(max_i_val)
+            for obs in self.full_buffer:
+                obs[i] = obs[i]/max_i_val
+        
         # you don't need to do this again.
         self.normalized = True
-        return self.buffer
+        return self.buffer, self.full_buffer
     
     def get_discrete_distribution(self):
         
