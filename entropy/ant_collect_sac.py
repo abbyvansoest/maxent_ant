@@ -3,7 +3,7 @@
 # python ant_collect_sac.py --env="Ant-v2" --T=1000 --episodes=100 --epochs=10 
 
 import sys
-sys.path.append('/home/abby/autoencoder')
+sys.path.append('/home/abby')
 
 import os
 import time
@@ -26,7 +26,9 @@ import ant_utils
 import plotting
 from ant_soft_actor_critic import AntSoftActorCritic
 from experience_buffer import ExperienceBuffer
-from autoencoder import Autoencoder
+from autoencoder.sparse import SparseAutoencoder
+from autoencoder.contractive import ContractiveAutoencoder
+from autoencoder.variational import VariationalAutoencoder
 
 args = utils.get_args()
 
@@ -346,7 +348,9 @@ def collect_entropy_policies(env, epochs, T, MODEL_DIR=''):
                                    render=False, epoch=i)
         
         print("Learning autoencoding....")
-        autoencoder = Autoencoder(ant_utils.state_dim, reduce_dim=args.autoencoder_reduce_dim, norm=full_normalization_factors)
+        autoencoder = VariationalAutoencoder(ant_utils.state_dim, 
+                                        reduce_dim=args.autoencoder_reduce_dim, 
+                                        norm=full_normalization_factors)
         autoencoder.set_data(collect_avg_obs(env, policies, T, n=20))
         autoencoder.set_test_data(collect_avg_obs(env, policies, T, n=2))
         autoencoder.train()
