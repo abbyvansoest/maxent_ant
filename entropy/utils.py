@@ -2,6 +2,7 @@ import numpy as np
 import argparse
 import copy
 import sys
+import os
 
 parser = argparse.ArgumentParser(description='PyTorch REINFORCE example')
 
@@ -59,6 +60,10 @@ parser.add_argument('--initial_state', action='store_true',
 
 parser.add_argument('--autoencoder_reduce_dim', type=int, default=6, metavar='ard',
                     help='reduction dimension for autoencoding')
+parser.add_argument('--autoencoder_norm', action='store_true',
+                    help='normalize state vectors learned by autoencoder')
+parser.add_argument('--reuse_net', action='store_true',
+                    help='make new autoencoder on each epoch')
 
 args = parser.parse_args()
 
@@ -183,3 +188,11 @@ def discretize_state(observation):
         state.append(discretize_value(feature, state_bins[i]))
     return state
 
+if not os.path.exists('logs/encoded'):
+    os.makedirs('logs/encoded')
+
+logfile = 'logs/' + args.exp_name + '.txt'
+def log_statement(s):
+    print(s)
+    with open(logfile, 'a') as f:
+        f.write(str(s)+'\n')

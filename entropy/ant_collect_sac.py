@@ -1,6 +1,6 @@
 # Collect entropy-based reward policies.
 
-# python ant_collect_sac.py --env="Ant-v2" --T=1000 --episodes=100 --epochs=10 
+# python ant_collect_sac.py --env="Ant-v2" --exp_name=test --T=1000 --n=20 --l=2 --hid=300 --epochs=16 --episodes=16 --gaussian --reduce_dim=5 --autoencoder_reduce_dim=8
 
 import sys
 sys.path.append('/home/abby')
@@ -8,15 +8,14 @@ sys.path.append('/home/abby')
 import os
 import time
 from datetime import datetime
-
 import random
+
 import numpy as np
 import scipy.stats
 from scipy.interpolate import interp2d
 from scipy.interpolate import spline
 from scipy.stats import norm
 from tabulate import tabulate
-import sys 
 
 import gym
 import tensorflow as tf
@@ -29,17 +28,68 @@ from experience_buffer import ExperienceBuffer
 from autoencoder.sparse import SparseAutoencoder
 from autoencoder.contractive import ContractiveAutoencoder
 from autoencoder.variational import VariationalAutoencoder
+from autoencoder.custom import CustomAutoencoder
 
 args = utils.get_args()
 
 from spinup.utils.run_utils import setup_logger_kwargs
 
+autoencoder = CustomAutoencoder(num_input=29, 
+                                num_hid1=24, num_hid2=16,
+                                reduce_dim=args.autoencoder_reduce_dim, 
+                                normalize=args.autoencoder_norm, 
+                                printfn=utils.log_statement)
+
+def learn_encoding(env, policies, epoch, T=1000):
+    print("Custom....")
+    # return # NOTE THIS
+    if not args.reuse_net:
+        autoencoder = CustomAutoencoder(num_input=29, 
+                                num_hid1=24, num_hid2=16,
+                                reduce_dim=args.autoencoder_reduce_dim, 
+                                normalize=args.autoencoder_norm, 
+                                printfn=utils.log_statement)
+    autoencoder.set_data(collect_avg_obs(env, policies, T, n=1000))
+    autoencoder.set_test_data(collect_avg_obs(env, policies, T, n=4))
+    autoencoder.train()
+    return autoencoder
+
+# collect data to be learned by autoencoder
+def collect_avg_obs(env, policies, T, n=100):
+    data = []
+    max_idx = len(policies) - 1
+    
+    utils.log_statement('Collecting ' + str(n*T) + ' steps')
+    
+    for iteration in range(n):        
+        env.reset()
+        obs = get_state(env, env.env._get_obs())
+       
+        for t in range(T):
+            action = np.zeros(shape=(1,ant_utils.action_dim))
+            
+            # select random policy uniform distribution
+            # take non-deterministic action for that policy
+            idx = random.randint(0, max_idx)
+            if idx == 0:
+                action = env.action_space.sample()
+            else:
+                action = policies[idx].get_action(obs, deterministic=args.deterministic)
+                
+            # Count the cumulative number of new states visited as a function of t.
+            obs, _, done, _ = env.step(action)
+            data.append(obs[:29])
+            obs = get_state(env, obs)
+        
+        print('Iteration %i/%i' % (iteration, n))
+    
+    return data
 
 def get_state(env, obs):
     state = env.env.state_vector()
     if not np.array_equal(obs[:len(state) - 2], state[2:]):
-        print(obs)
-        print(state)
+        utils.log_statement(obs)
+        utils.log_statement(state)
         raise ValueError("state and observation are not equal")
     return state
 
@@ -93,34 +143,9 @@ def compute_states_visited_xy(env, policies, T, n, N=20, initial_state=[], basel
     return states_visited_xy
 
 # run a simulation to see how the average policy behaves.
-def collect_avg_obs(env, policies, T, n=10):
-    data = []
-    max_idx = len(policies) - 1
-    
-    for iteration in range(n):        
-        env.reset()
-        obs = get_state(env, env.env._get_obs())
-       
-        for t in range(T):
-            action = np.zeros(shape=(1,ant_utils.action_dim))
-            
-            # select random policy uniform distribution
-            # take non-deterministic action for that policy
-            idx = random.randint(0, max_idx)
-            if idx == 0:
-                action = env.action_space.sample()
-            else:
-                action = policies[idx].get_action(obs, deterministic=args.deterministic)
-                
-            # Count the cumulative number of new states visited as a function of t.
-            obs, _, done, _ = env.step(action)
-            data.append(env.env.state_vector())
-            obs = get_state(env, obs)
-    
-    return data
-
-# run a simulation to see how the average policy behaves.
-def execute_average_policy(env, policies, T, reward_fn=[], norm=[], initial_state=[], n=10, render=False, epoch=0):
+def execute_average_policy(env, policies, T, autoencoder=None,
+                           reward_fn=[], norm=[], initial_state=[], 
+                           n=10, render=False, epoch=0):
     
     p = np.zeros(shape=(tuple(ant_utils.num_states)))
     p_xy = np.zeros(shape=(tuple(ant_utils.num_states_2d)))
@@ -179,6 +204,15 @@ def execute_average_policy(env, policies, T, reward_fn=[], norm=[], initial_stat
                 
             # Count the cumulative number of new states visited as a function of t.
             obs, _, done, _ = env.step(action)
+            
+            # log encoded data to file.
+            if autoencoder is not None:
+                encodedfile = 'logs/encoded/' + args.exp_name + '.txt'
+                val = autoencoder.encode(obs[:29])
+                with open(encodedfile, 'a') as f:
+                    f.write(str(val) + '\n')
+                print(autoencoder.encode(obs[:29]))
+            
             obs = get_state(env, obs)
             reward = reward_fn[tuple(ant_utils.discretize_state(obs, norm))]
             rewards[t] += reward
@@ -227,7 +261,7 @@ def init_state(env):
     return state
 
 def entropy(pt):
-    print("pt size %d" % pt.size)
+    utils.log_statement("pt size %d" % pt.size)
     # entropy = -sum(pt*log(pt))
     entropy = 0.0
     for p in pt:
@@ -294,24 +328,22 @@ def collect_entropy_policies(env, epochs, T, MODEL_DIR=''):
             
     prebuf.normalize()
     normalization_factors = prebuf.normalization_factors
-    full_normalization_factors = prebuf.full_normalization_factors
-    print(normalization_factors)
-    print(full_normalization_factors)
+    utils.log_statement(normalization_factors)
     prebuf = None
 
     reward_fn = np.zeros(shape=(tuple(ant_utils.num_states)))
 
     for i in range(epochs):
-        print("*** ------- EPOCH %d ------- ***" % i)
+        utils.log_statement("*** ------- EPOCH %d ------- ***" % i)
         
         # clear initial state if applicable.
         if not args.initial_state:
             initial_state = []
         else:
-            print(initial_state)
-            print(tuple(ant_utils.discretize_state_2d(initial_state, normalization_factors)))
-            print(tuple(ant_utils.discretize_state(initial_state, normalization_factors)))
-        print("max reward: " + str(np.max(reward_fn)))
+            utils.log_statement(initial_state)
+            utils.log_statement(tuple(ant_utils.discretize_state_2d(initial_state, normalization_factors)))
+            utils.log_statement(tuple(ant_utils.discretize_state(initial_state, normalization_factors)))
+        utils.log_statement("max reward: " + str(np.max(reward_fn)))
 
         logger_kwargs = setup_logger_kwargs("model" + str(i), data_dir=experiment_directory)
 
@@ -338,22 +370,17 @@ def collect_entropy_policies(env, epochs, T, MODEL_DIR=''):
                               start_steps=args.start_steps) 
         policies.append(sac)
         
+        print("Learning autoencoding....")
+        autoencoder = learn_encoding(env, policies, i)
+        
         # Execute the cumulative average policy thus far.
         # Estimate distribution and entropy.
         print("Executing mixed policy...")
         average_p, average_p_xy, initial_state, states_visited, states_visited_xy = \
-            execute_average_policy(env, policies, T, 
+            execute_average_policy(env, policies, T, autoencoder=autoencoder,
                                    reward_fn=reward_fn, norm=normalization_factors, 
                                    initial_state=initial_state, n=args.n, 
                                    render=False, epoch=i)
-        
-        print("Learning autoencoding....")
-        autoencoder = VariationalAutoencoder(ant_utils.state_dim, 
-                                        reduce_dim=args.autoencoder_reduce_dim, 
-                                        norm=full_normalization_factors)
-        autoencoder.set_data(collect_avg_obs(env, policies, T, n=20))
-        autoencoder.set_test_data(collect_avg_obs(env, policies, T, n=2))
-        autoencoder.train()
         
         print("Calculating maxEnt entropy...")
         round_entropy = entropy(average_p.ravel())
@@ -399,17 +426,17 @@ def collect_entropy_policies(env, epochs, T, MODEL_DIR=''):
         plotting.states_visited_over_time(states_visited_xy, states_visited_xy_baseline, i, ext='_xy')
         
         # save for cumulative plot.
-#         if i in states_visited_indexes:
-#             # average over a whole bunch of rollouts
-#             # slow: so only do this when needed.
-#             print("Averaging unique xy states visited....")
-#             states_visited_xy = compute_states_visited_xy(env, policies, T=T, n=args.n, N=args.avg_N)
-#             states_visited_xy_baseline = compute_states_visited_xy(env, policies, 
-#                                                                    T=T, n=args.n, N=args.avg_N, 
-#                                                                    initial_state=initial_state, 
-#                                                                    baseline=True)
-#             states_visited_cumulative.append(states_visited_xy)
-#             states_visited_cumulative_baseline.append(states_visited_xy_baseline)
+        if i in states_visited_indexes:
+            # average over a whole bunch of rollouts
+            # slow: so only do this when needed.
+            print("Averaging unique xy states visited....")
+            states_visited_xy = compute_states_visited_xy(env, policies, T=T, n=args.n, N=args.avg_N)
+            states_visited_xy_baseline = compute_states_visited_xy(env, policies, 
+                                                                   T=T, n=args.n, N=args.avg_N, 
+                                                                   initial_state=initial_state, 
+                                                                   baseline=True)
+            states_visited_cumulative.append(states_visited_xy)
+            states_visited_cumulative_baseline.append(states_visited_xy_baseline)
 
         print("Compute baseline entropy....")
         round_entropy_baseline = entropy(p_baseline.ravel())
@@ -434,8 +461,8 @@ def collect_entropy_policies(env, epochs, T, MODEL_DIR=''):
             running_avg_ps_baseline_xy.append(np.copy(running_avg_p_baseline_xy))
             avg_ps_baseline_xy.append(np.copy(p_baseline_xy))
     
-        print(average_p_xy)
-        print(p_baseline_xy)
+        utils.log_statement(average_p_xy)
+        utils.log_statement(p_baseline_xy)
         
         # Calculate percent of state space visited.
         pct = np.count_nonzero(running_avg_p)/float(running_avg_p.size)
@@ -463,7 +490,7 @@ def collect_entropy_policies(env, epochs, T, MODEL_DIR=''):
                 round_entropy, running_avg_ent, 
                 pct_xy, pct]
         table = tabulate(np.transpose([col1, col2, col3]), col_headers, tablefmt="fancy_grid", floatfmt=".4f")
-        print(table)
+        utils.log_statement(table)
         
         # Plot from round.
         plotting.heatmap(running_avg_p_xy, average_p_xy, i)

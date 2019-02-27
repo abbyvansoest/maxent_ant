@@ -39,6 +39,7 @@ dim_dict = {
 qpos = env.env.init_qpos
 qvel = env.env.init_qvel
 
+full_obs_dim = int(len(env.reset()))
 state_dim = int(env.env.state_vector().shape[0])
 action_dim = int(env.action_space.sample().shape[0])
 
@@ -67,6 +68,7 @@ G = np.transpose(np.random.normal(0, 1, (state_dim - len(special), reduce_dim)))
 
 total_state_space = x_bins*y_bins* (num_bins**reduce_dim)
 
+print("full_obs_dim = %d" % full_obs_dim)
 print("total_state_space = %d" % total_state_space)
 print("expected_state_dim = %d" % expected_state_dim)
 print("action_dim = %d" % action_dim)
