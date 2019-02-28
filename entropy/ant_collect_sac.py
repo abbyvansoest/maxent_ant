@@ -2,6 +2,9 @@
 
 # python ant_collect_sac.py --env="Ant-v2" --exp_name=test --T=1000 --n=20 --l=2 --hid=300 --epochs=16 --episodes=16 --gaussian --reduce_dim=5 --autoencoder_reduce_dim=8
 
+# for discretizing with autoencoding
+# python ant_collect_sac.py --env="Ant-v2" --exp_name=_discretize_autoencoder_6 --T=1000 --n=20 --l=2 --hid=300 --epochs=16 --episodes=30 --autoencode --autoencoder_reduce_dim=6
+
 import sys
 sys.path.append('/home/abby')
 
@@ -75,8 +78,6 @@ def compute_states_visited_xy(env, policies, T, n, N=20, initial_state=[], basel
     max_idx = len(policies) - 1
     
     for it in range(N): 
-        print(it)
-        
         p_xy = np.zeros(shape=(tuple(ant_utils.num_states_2d))) 
         cumulative_states_visited_xy = 0
         
@@ -311,8 +312,6 @@ def collect_entropy_policies(env, epochs, T, MODEL_DIR=''):
             initial_state = []
         else:
             utils.log_statement(initial_state)
-#             utils.log_statement(tuple(ant_utils.discretize_state_2d(initial_state, normalization_factors)))
-#             utils.log_statement(tuple(ant_utils.discretize_state(initial_state, normalization_factors)))
         utils.log_statement("max reward: " + str(np.max(reward_fn)))
 
         logger_kwargs = setup_logger_kwargs("model" + str(i), data_dir=experiment_directory)
@@ -340,18 +339,10 @@ def collect_entropy_policies(env, epochs, T, MODEL_DIR=''):
         policies.append(sac)
         
         print("Learning autoencoding....")
-        # TODO: testing values
-        train = collect_avg_obs(env, policies, T=1000, n=10)
-        test = collect_avg_obs(env, policies, T=1000, n=2)
+        train = collect_avg_obs(env, policies, T=1000, n=10000)
+        test = collect_avg_obs(env, policies, T=1000, n=200)
         ant_utils.learn_encoding(train, test)
 
-        # TODO: here
-        # collect encoding data
-        # send to ant_utils
-        # learn autoencoding
-        # execute across test set and get normalization factors
-        # have a discretize_state_autoencoder function to encode state using most recent normalization/autoencoder 
-        
         # Execute the cumulative average policy thus far.
         # Estimate distribution and entropy.
         print("Executing mixed policy...")
@@ -394,12 +385,6 @@ def collect_entropy_policies(env, epochs, T, MODEL_DIR=''):
 
         print("Collecting baseline experience....")
         p_baseline, p_baseline_xy, states_visited_baseline, states_visited_xy_baseline = sac.test_agent_random(T, normalization_factors=normalization_factors, n=args.n)
-        
-        print('Random visits same # states....')
-        print(len(states_visited))
-        print(len(states_visited_baseline))
-        print(len(states_visited_xy))
-        print(len(states_visited_xy_baseline))
         
         plotting.states_visited_over_time(states_visited, states_visited_baseline, i)
         plotting.states_visited_over_time(states_visited_xy, states_visited_xy_baseline, i, ext='_xy')

@@ -131,6 +131,12 @@ def get_state_bins_reduced():
         state_bins.append(discretize_range(min_bin, max_bin, num_bins))
     return state_bins
 
+def get_state_bins_autoencoder():
+    state_bins = []
+    for i in range(args.autoencoder_reduce_dim):
+        state_bins.append(discretize_range(-1, 1, 10))
+    return state_bins
+
 def get_state_bins_2d_state():
     state_bins = []
     for i in range(start, stop):
@@ -146,6 +152,8 @@ def get_num_states(state_bins):
 state_bins = []
 if args.gaussian:
     state_bins = get_state_bins_reduced()
+elif args.autoencode:
+    state_bins = get_state_bins_autoencoder()
 else:
     state_bins = get_state_bins()
 num_states = get_num_states(state_bins)
@@ -184,18 +192,21 @@ def discretize_state_reduced(observation, norm=[]):
 
 # Discretize the observation features and reduce them to a single list.
 def discretize_state_autoencoder(env):
-    observation = env.env._get_obs()[:29]
-    state = autoencoders[-1].encode(observation)
-    state = np.divide(state, norm_factors[-1])
-    
+    obs = env.env._get_obs()[:29]
+    obs = autoencoders[-1].encode(obs).flatten()
+    obs = np.divide(obs, norm_factors[-1])
+
     # log encoded data to file.
     encodedfile = 'logs/encoded/' + args.exp_name + '.txt'
     with open(encodedfile, 'a') as f:
-        f.write(str(state) + '\n')
+        f.write(str(obs) + '\n')
         
     # todo: discretize from here....
-    print(state)
-    
+    state = []
+    for i, feature in enumerate(obs):
+        state.append(discretize_value(feature, state_bins[i]))
+#     print(obs)
+#     print(state)
     return state
 
 # Discretize the observation features and reduce them to a single list.
@@ -203,8 +214,6 @@ def discretize_state(observation, norm=[], env=None):
     if args.gaussian:
         state = discretize_state_reduced(observation, norm)
     elif args.autoencode:
-        # TODO: observation is the wrong dimension
-        # need to pass env and call env._get_obs() => use to encode and discretize
         state = discretize_state_autoencoder(env)
     else:
         state = discretize_state_normal(observation)
