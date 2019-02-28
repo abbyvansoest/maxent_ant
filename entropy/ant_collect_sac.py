@@ -25,34 +25,10 @@ import ant_utils
 import plotting
 from ant_soft_actor_critic import AntSoftActorCritic
 from experience_buffer import ExperienceBuffer
-from autoencoder.sparse import SparseAutoencoder
-from autoencoder.contractive import ContractiveAutoencoder
-from autoencoder.variational import VariationalAutoencoder
-from autoencoder.custom import CustomAutoencoder
 
 args = utils.get_args()
 
 from spinup.utils.run_utils import setup_logger_kwargs
-
-autoencoder = CustomAutoencoder(num_input=29, 
-                                num_hid1=24, num_hid2=16,
-                                reduce_dim=args.autoencoder_reduce_dim, 
-                                normalize=args.autoencoder_norm, 
-                                printfn=utils.log_statement)
-
-def learn_encoding(env, policies, epoch, T=1000):
-    print("Custom....")
-    # return # NOTE THIS
-    if not args.reuse_net:
-        autoencoder = CustomAutoencoder(num_input=29, 
-                                num_hid1=24, num_hid2=16,
-                                reduce_dim=args.autoencoder_reduce_dim, 
-                                normalize=args.autoencoder_norm, 
-                                printfn=utils.log_statement)
-    autoencoder.set_data(collect_avg_obs(env, policies, T, n=1000))
-    autoencoder.set_test_data(collect_avg_obs(env, policies, T, n=4))
-    autoencoder.train()
-    return autoencoder
 
 # collect data to be learned by autoencoder
 def collect_avg_obs(env, policies, T, n=100):
@@ -143,7 +119,7 @@ def compute_states_visited_xy(env, policies, T, n, N=20, initial_state=[], basel
     return states_visited_xy
 
 # run a simulation to see how the average policy behaves.
-def execute_average_policy(env, policies, T, autoencoder=None,
+def execute_average_policy(env, policies, T,
                            reward_fn=[], norm=[], initial_state=[], 
                            n=10, render=False, epoch=0):
     
@@ -205,27 +181,19 @@ def execute_average_policy(env, policies, T, autoencoder=None,
             # Count the cumulative number of new states visited as a function of t.
             obs, _, done, _ = env.step(action)
             
-            # log encoded data to file.
-            if autoencoder is not None:
-                encodedfile = 'logs/encoded/' + args.exp_name + '.txt'
-                val = autoencoder.encode(obs[:29])
-                with open(encodedfile, 'a') as f:
-                    f.write(str(val) + '\n')
-                print(autoencoder.encode(obs[:29]))
-            
             obs = get_state(env, obs)
-            reward = reward_fn[tuple(ant_utils.discretize_state(obs, norm))]
+            reward = reward_fn[tuple(ant_utils.discretize_state(obs, norm, env))]
             rewards[t] += reward
 
             # if this is the first time you are seeing this state, increment.
-            if p[tuple(ant_utils.discretize_state(obs, norm))] == 0:
+            if p[tuple(ant_utils.discretize_state(obs, norm, env))] == 0:
                 cumulative_states_visited += 1
             states_visited.append(cumulative_states_visited)
             if p_xy[tuple(ant_utils.discretize_state_2d(obs, norm))]  == 0:
                 cumulative_states_visited_xy += 1
             states_visited_xy.append(cumulative_states_visited_xy)
 
-            p[tuple(ant_utils.discretize_state(obs, norm))] += 1
+            p[tuple(ant_utils.discretize_state(obs, norm, env))] += 1
             p_xy[tuple(ant_utils.discretize_state_2d(obs, norm))] += 1
             denom += 1
             
@@ -330,6 +298,8 @@ def collect_entropy_policies(env, epochs, T, MODEL_DIR=''):
     normalization_factors = prebuf.normalization_factors
     utils.log_statement(normalization_factors)
     prebuf = None
+    if not args.gaussian:
+        normalization_factors = []
 
     reward_fn = np.zeros(shape=(tuple(ant_utils.num_states)))
 
@@ -341,8 +311,8 @@ def collect_entropy_policies(env, epochs, T, MODEL_DIR=''):
             initial_state = []
         else:
             utils.log_statement(initial_state)
-            utils.log_statement(tuple(ant_utils.discretize_state_2d(initial_state, normalization_factors)))
-            utils.log_statement(tuple(ant_utils.discretize_state(initial_state, normalization_factors)))
+#             utils.log_statement(tuple(ant_utils.discretize_state_2d(initial_state, normalization_factors)))
+#             utils.log_statement(tuple(ant_utils.discretize_state(initial_state, normalization_factors)))
         utils.log_statement("max reward: " + str(np.max(reward_fn)))
 
         logger_kwargs = setup_logger_kwargs("model" + str(i), data_dir=experiment_directory)
@@ -360,7 +330,6 @@ def collect_entropy_policies(env, epochs, T, MODEL_DIR=''):
             logger_kwargs=logger_kwargs, 
             normalization_factors=normalization_factors,
             learn_reduced=args.learn_reduced)
-        # TODO: start learning from initial state to add gradient?
         # The first policy is random
         if i == 0:
             sac.soft_actor_critic(epochs=0) 
@@ -371,13 +340,23 @@ def collect_entropy_policies(env, epochs, T, MODEL_DIR=''):
         policies.append(sac)
         
         print("Learning autoencoding....")
-        autoencoder = learn_encoding(env, policies, i)
+        # TODO: testing values
+        train = collect_avg_obs(env, policies, T=1000, n=10)
+        test = collect_avg_obs(env, policies, T=1000, n=2)
+        ant_utils.learn_encoding(train, test)
+
+        # TODO: here
+        # collect encoding data
+        # send to ant_utils
+        # learn autoencoding
+        # execute across test set and get normalization factors
+        # have a discretize_state_autoencoder function to encode state using most recent normalization/autoencoder 
         
         # Execute the cumulative average policy thus far.
         # Estimate distribution and entropy.
         print("Executing mixed policy...")
         average_p, average_p_xy, initial_state, states_visited, states_visited_xy = \
-            execute_average_policy(env, policies, T, autoencoder=autoencoder,
+            execute_average_policy(env, policies, T,
                                    reward_fn=reward_fn, norm=normalization_factors, 
                                    initial_state=initial_state, n=args.n, 
                                    render=False, epoch=i)

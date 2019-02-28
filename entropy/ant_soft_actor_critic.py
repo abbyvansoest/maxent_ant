@@ -4,8 +4,6 @@ import numpy as np
 import tensorflow as tf
 import gym
 import time
-# from spinup.algos.sac import core
-# from spinup.algos.sac.core import get_vars
 import core
 from core import get_vars
 from spinup.utils.logx import EpochLogger
@@ -99,7 +97,6 @@ class AntSoftActorCritic:
             self.x_ph, self.a_ph, self.x2_ph, self.r_ph, self.d_ph = core.placeholders(self.obs_dim, self.act_dim, self.obs_dim, None, None)
 
             # Main outputs from computation graph
-            # with tf.device('/job:localhost/replica:0/task:0/device:GPU:2'):
             with tf.variable_scope(self.main_scope):
                 self.mu, self.pi, self.logp_pi, self.q1, self.q2, self.q1_pi, self.q2_pi, self.v, self.std = actor_critic(self.x_ph, self.a_ph, **ac_kwargs)
             
@@ -160,7 +157,7 @@ class AntSoftActorCritic:
             return r
         
         # use self.normalization_factors to normalize the state.
-        tup = tuple(ant_utils.discretize_state(o, self.normalization_factors))
+        tup = tuple(ant_utils.discretize_state(o, self.normalization_factors, env))
         return self.reward_fn[tup]
 
     def get_action(self, o, deterministic=False): 
@@ -178,10 +175,7 @@ class AntSoftActorCritic:
             return self.sess.run(self.std, feed_dict={self.x_ph: o.reshape(1,-1)})[0]
 
     def test_agent(self, T, n=10, initial_state=[], store_log=True, deterministic=True, reset=False):
-        
-#         p = np.zeros(shape=(tuple(ant_utils.num_states)))
-#         p_xy = np.zeros(shape=(tuple(ant_utils.num_states_2d)))
-        
+
         denom = 0
 
         for j in range(n):
@@ -199,29 +193,19 @@ class AntSoftActorCritic:
                 a = self.get_action(o, deterministic)
                 o, r, d, _ = self.test_env.step(a)
                 o = get_state(self.test_env, o)
-                
-#                 tup = tuple(ant_utils.discretize_state(o, self.normalization_factors))
-#                 p[tup] += 1
-#                 tup_xy = tuple(ant_utils.discretize_state_2d(o, self.normalization_factors))
-#                 p_xy[tup_xy] += 1
-                
+
                 r = self.reward(self.test_env, r, o)
                 ep_ret += r
                 ep_len += 1
                 denom += 1
                 
                 if d and reset:
-#                     self.test_env.reset()
                     d = False
 
             if store_log:
                 self.logger.store(TestEpRet=ep_ret, TestEpLen=ep_len)
                 
-#         p /= float(denom)
-#         p_xy /= float(denom)
-        
-#         return p, p_xy
-
+                
     def test_agent_random(self, T, normalization_factors=[], n=10):
         
         p = np.zeros(shape=(tuple(ant_utils.num_states)))
@@ -244,21 +228,20 @@ class AntSoftActorCritic:
                 r = self.reward(self.test_env, r, o)
                 
                 # if this is the first time you are seeing this state, increment.
-                if p[tuple(ant_utils.discretize_state(o, normalization_factors))] == 0:
+                if p[tuple(ant_utils.discretize_state(o, normalization_factors, self.test_env))] == 0:
                     cumulative_states_visited_baseline += 1
                 states_visited_baseline.append(cumulative_states_visited_baseline)
                 if p_xy[tuple(ant_utils.discretize_state_2d(o, normalization_factors))]  == 0:
                     cumulative_states_visited_xy_baseline += 1
                 states_visited_xy_baseline.append(cumulative_states_visited_xy_baseline)
                 
-                p[tuple(ant_utils.discretize_state(o, normalization_factors))] += 1
+                p[tuple(ant_utils.discretize_state(o, normalization_factors, self.test_env))] += 1
                 p_xy[tuple(ant_utils.discretize_state_2d(o, normalization_factors))] += 1
                 
                 denom += 1
                 ep_len += 1
                 
-                # CRITICAL: ignore done signal
-                if d:
+                if d: # CRITICAL: ignore done signal
                     d = False
         
         p /= float(denom)

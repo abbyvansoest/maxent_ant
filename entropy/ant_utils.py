@@ -24,6 +24,7 @@
 import gym
 import time
 import numpy as np
+from autoencoder.custom import CustomAutoencoder
 
 import utils
 args = utils.get_args()
@@ -72,6 +73,27 @@ print("full_obs_dim = %d" % full_obs_dim)
 print("total_state_space = %d" % total_state_space)
 print("expected_state_dim = %d" % expected_state_dim)
 print("action_dim = %d" % action_dim)
+
+autoencoders = []
+norm_factors = []
+
+# TODO: is any of this being set globally?????
+def learn_encoding(train, test):
+    print("Custom....")
+    if not args.reuse_net:
+        autoencoder = CustomAutoencoder(num_input=29, 
+                                num_hid1=24, num_hid2=16,
+                                reduce_dim=args.autoencoder_reduce_dim, 
+                                normalize=args.autoencoder_norm, 
+                                printfn=utils.log_statement)
+    autoencoder.set_data(train)
+    autoencoder.set_test_data(test)
+    autoencoder.train()
+    
+    # set normalization factors
+    norm_factors.append(autoencoder.test(iterations=5))
+    
+    autoencoders.append(autoencoder)
 
 def convert_obs(observation):
     new_obs = []
@@ -161,9 +183,29 @@ def discretize_state_reduced(observation, norm=[]):
     return state
 
 # Discretize the observation features and reduce them to a single list.
-def discretize_state(observation, norm=[]):
+def discretize_state_autoencoder(env):
+    observation = env.env._get_obs()[:29]
+    state = autoencoders[-1].encode(observation)
+    state = np.divide(state, norm_factors[-1])
+    
+    # log encoded data to file.
+    encodedfile = 'logs/encoded/' + args.exp_name + '.txt'
+    with open(encodedfile, 'a') as f:
+        f.write(str(state) + '\n')
+        
+    # todo: discretize from here....
+    print(state)
+    
+    return state
+
+# Discretize the observation features and reduce them to a single list.
+def discretize_state(observation, norm=[], env=None):
     if args.gaussian:
         state = discretize_state_reduced(observation, norm)
+    elif args.autoencode:
+        # TODO: observation is the wrong dimension
+        # need to pass env and call env._get_obs() => use to encode and discretize
+        state = discretize_state_autoencoder(env)
     else:
         state = discretize_state_normal(observation)
 
