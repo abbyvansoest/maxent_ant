@@ -3,6 +3,8 @@
 import numpy as np
 import tensorflow as tf
 import gym
+from gym import wrappers
+
 import time
 import core
 from core import get_vars
@@ -174,7 +176,6 @@ class AntSoftActorCritic:
             return self.sess.run(self.std, feed_dict={self.x_ph: o.reshape(1,-1)})[0]
 
     def test_agent(self, T, n=10, initial_state=[], store_log=True, deterministic=True, reset=False):
-
         denom = 0
 
         for j in range(n):
@@ -203,7 +204,6 @@ class AntSoftActorCritic:
 
             if store_log:
                 self.logger.store(TestEpRet=ep_ret, TestEpLen=ep_len)
-                
                 
     def test_agent_random(self, T, normalization_factors=[], n=10):
         
@@ -247,6 +247,26 @@ class AntSoftActorCritic:
         p_xy /= float(denom)
         
         return p, p_xy, states_visited_baseline, states_visited_xy_baseline
+
+
+    # record film of policy
+    def record(self, T, video_dir='', on_policy=False, deterministic=False):
+        print("rendering env in record()")
+        wrapped_env = wrappers.Monitor(self.test_env, video_dir)
+        o = wrapped_env.reset()
+
+        for t in range(T):
+            o = wrapped_env.unwrapped.state_vector()
+            if on_policy:
+                a = self.get_action(o, deterministic)
+            else:
+                a = wrapped_env.unwrapped.action_space.sample()
+            o, r, d, _ = wrapped_env.step(a)
+            if d:
+                wrapped_env.reset()
+                break
+        wrapped_env.close()
+
 
     def soft_actor_critic(self, initial_state=[], steps_per_epoch=5000, epochs=100,
             batch_size=100, start_steps=10000, save_freq=1):

@@ -254,6 +254,8 @@ def entropy(pt):
 # and learn T policies using policy gradients and a reward function 
 # based on entropy.
 def collect_entropy_policies(env, epochs, T, MODEL_DIR=''):
+
+    video_dir = 'videos/' + args.exp_name
     
     direct = os.getcwd()+ '/data/'
     experiment_directory = direct + args.exp_name
@@ -345,6 +347,11 @@ def collect_entropy_policies(env, epochs, T, MODEL_DIR=''):
                               initial_state=initial_state, 
                               start_steps=args.start_steps) 
         policies.append(sac)
+
+        if args.render:
+            epoch = 'epoch_%02d/' % (i) 
+            sac.record(T=1000, video_dir=video_dir+'/entropy/'+epoch, on_policy=True) 
+            sac.record(T=1000, video_dir=video_dir+'/baseline/'+epoch, on_policy=False) 
         
         if args.autoencode:
             print("Learning autoencoding....")
