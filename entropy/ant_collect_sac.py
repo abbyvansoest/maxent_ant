@@ -16,7 +16,6 @@ from tabulate import tabulate
 import sys 
 
 import gym
-from gym.spaces import prng
 import tensorflow as tf
 
 import utils
@@ -210,6 +209,8 @@ def entropy(pt):
 # and learn T policies using policy gradients and a reward function 
 # based on entropy.
 def collect_entropy_policies(env, epochs, T, MODEL_DIR=''):
+
+    video_dir = 'videos/' + args.exp_name
     
     direct = os.getcwd()+ '/data/'
     experiment_directory = direct + args.exp_name
@@ -303,6 +304,11 @@ def collect_entropy_policies(env, epochs, T, MODEL_DIR=''):
                               initial_state=initial_state, 
                               start_steps=args.start_steps) 
         policies.append(sac)
+
+        if args.render:
+            epoch = 'epoch_%02d/' % (i) 
+            sac.record(T, video_dir=video_dir+'/entropy/'+epoch, on_policy=True) 
+            sac.record(T, video_dir=video_dir+'/baseline/'+epoch, on_policy=False) 
         
         # Execute the cumulative average policy thus far.
         # Estimate distribution and entropy.
@@ -450,7 +456,6 @@ def main():
     # Make environment.
     env = gym.make(args.env)
     env.seed(int(time.time())) # seed environment
-    prng.seed(int(time.time())) # seed action space
     
     TIME = datetime.now().strftime('%Y_%m_%d-%H-%M')
     plotting.FIG_DIR = 'figs/' + args.env + '/'

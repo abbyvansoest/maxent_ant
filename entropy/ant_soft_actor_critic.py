@@ -3,6 +3,8 @@
 import numpy as np
 import tensorflow as tf
 import gym
+from gym import wrappers
+
 import time
 # from spinup.algos.sac import core
 # from spinup.algos.sac.core import get_vars
@@ -179,9 +181,6 @@ class AntSoftActorCritic:
 
     def test_agent(self, T, n=10, initial_state=[], store_log=True, deterministic=True, reset=False):
         
-#         p = np.zeros(shape=(tuple(ant_utils.num_states)))
-#         p_xy = np.zeros(shape=(tuple(ant_utils.num_states_2d)))
-        
         denom = 0
 
         for j in range(n):
@@ -200,27 +199,17 @@ class AntSoftActorCritic:
                 o, r, d, _ = self.test_env.step(a)
                 o = get_state(self.test_env, o)
                 
-#                 tup = tuple(ant_utils.discretize_state(o, self.normalization_factors))
-#                 p[tup] += 1
-#                 tup_xy = tuple(ant_utils.discretize_state_2d(o, self.normalization_factors))
-#                 p_xy[tup_xy] += 1
-                
                 r = self.reward(self.test_env, r, o)
                 ep_ret += r
                 ep_len += 1
                 denom += 1
                 
                 if d and reset:
-#                     self.test_env.reset()
                     d = False
 
             if store_log:
                 self.logger.store(TestEpRet=ep_ret, TestEpLen=ep_len)
                 
-#         p /= float(denom)
-#         p_xy /= float(denom)
-        
-#         return p, p_xy
 
     def test_agent_random(self, T, normalization_factors=[], n=10):
         
@@ -265,6 +254,22 @@ class AntSoftActorCritic:
         p_xy /= float(denom)
         
         return p, p_xy, states_visited_baseline, states_visited_xy_baseline
+
+
+    # record film of policy
+    def record(self, T, video_dir='', on_policy=False, deterministic=False):
+        print("rendering env in record()")
+        wrapped_env = wrappers.Monitor(self.test_env, video_dir)
+        o = wrapped_env.reset()
+
+        for t in range(T):
+            o = wrapped_env.unwrapped.state_vector()
+            if on_policy:
+                a = self.get_action(o, deterministic)
+            else:
+                a = wrapped_env.unwrapped.action_space.sample()
+            o, r, d, _ = wrapped_env.step(a)
+
 
     def soft_actor_critic(self, initial_state=[], steps_per_epoch=5000, epochs=100,
             batch_size=100, start_steps=10000, save_freq=1):
