@@ -252,20 +252,34 @@ class AntSoftActorCritic:
     # record film of policy
     def record(self, T, video_dir='', on_policy=False, deterministic=False):
         print("rendering env in record()")
-        wrapped_env = wrappers.Monitor(self.test_env, video_dir)
-        o = wrapped_env.reset()
+        
+        # TODO: set width and height.
+        
+        for i in range(10):
+            self.test_env.reset()
+            wrapped_env = wrappers.Monitor(self.test_env, video_dir + '_%d'%(i))
+            o = wrapped_env.reset()
 
-        for t in range(T):
-            o = wrapped_env.unwrapped.state_vector()
-            if on_policy:
-                a = self.get_action(o, deterministic)
-            else:
-                a = wrapped_env.unwrapped.action_space.sample()
-            o, r, d, _ = wrapped_env.step(a)
-            if d:
-                wrapped_env.reset()
-                break
-        wrapped_env.close()
+            t = 0
+            d = False
+            while t < T and not d:
+                o = wrapped_env.unwrapped.state_vector()
+                if on_policy:
+                    a = self.get_action(o, deterministic)
+                else:
+                    a = wrapped_env.unwrapped.action_space.sample()
+                o2, r, d, _ = wrapped_env.step(a)
+                print(t)
+                
+                if np.all(np.isclose(o, wrapped_env.unwrapped.state_vector())):
+                    print('close!')
+                    break
+                    
+                wrapped_env.unwrapped.render(mode='rgb_array', width=1000, height=1000)
+                
+                o = o2
+                t = t + 1
+            wrapped_env.close()
 
 
     def soft_actor_critic(self, initial_state=[], steps_per_epoch=5000, epochs=100,
