@@ -1,6 +1,6 @@
 # Collect entropy-based reward policies.
 
-# python ant_collect_sac.py --env="Ant-v2" --exp_name=test --T=1000 --n=20 --l=2 --hid=300 --epochs=16 --episodes=16 --gaussian --reduce_dim=5 --autoencoder_reduce_dim=8
+# python ant_collect_sac.py --env="Ant-v2" --exp_name=test --T=1000 --n=20 --l=2 --hid=300 --epochs=16 --episodes=16 --gaussian --reduce_dim=5
 
 # for discretizing with autoencoding
 # python ant_collect_sac.py --env="Ant-v2" --exp_name=_discretize_autoencoder_6 --T=1000 --n=20 --l=2 --hid=300 --epochs=16 --episodes=30 --autoencode --autoencoder_reduce_dim=6
@@ -105,12 +105,12 @@ def compute_states_visited_xy(env, policies, T, n, N=20, initial_state=[], basel
                 obs = get_state(env, obs)
 
                 # if this is the first time you are seeing this state, increment.
-                if p_xy[tuple(ant_utils.discretize_state_2d(obs, norm))]  == 0:
+                if p_xy[tuple(ant_utils.discretize_state_2d(obs, norm, env))]  == 0:
                     cumulative_states_visited_xy += 1
                 
                 step = iteration*T + t
                 states_visited_xy[step] += cumulative_states_visited_xy
-                p_xy[tuple(ant_utils.discretize_state_2d(obs, norm))] += 1
+                p_xy[tuple(ant_utils.discretize_state_2d(obs, norm, env))] += 1
 
                 if done: # CRITICAL: ignore done signal
                     done = False
@@ -127,6 +127,8 @@ def execute_average_policy(env, policies, T,
     p = np.zeros(shape=(tuple(ant_utils.num_states)))
     p_xy = np.zeros(shape=(tuple(ant_utils.num_states_2d)))
     random_initial_state = []
+    
+    discretized = []
     
     cumulative_states_visited = 0
     states_visited = []
@@ -181,21 +183,26 @@ def execute_average_policy(env, policies, T,
                 
             # Count the cumulative number of new states visited as a function of t.
             obs, _, done, _ = env.step(action)
-            
             obs = get_state(env, obs)
-            reward = reward_fn[tuple(ant_utils.discretize_state(obs, norm, env))]
+            
+            # TODO: collect all discretized obs. compute histogram for
+            # each axis of the obs.
+            discretized_obs = ant_utils.discretize_state(obs, norm, env)
+            discretized.append(discretized_obs)
+            
+            reward = reward_fn[tuple(discretized_obs)]
             rewards[t] += reward
 
             # if this is the first time you are seeing this state, increment.
             if p[tuple(ant_utils.discretize_state(obs, norm, env))] == 0:
                 cumulative_states_visited += 1
             states_visited.append(cumulative_states_visited)
-            if p_xy[tuple(ant_utils.discretize_state_2d(obs, norm))]  == 0:
+            if p_xy[tuple(ant_utils.discretize_state_2d(obs, norm, env))]  == 0:
                 cumulative_states_visited_xy += 1
             states_visited_xy.append(cumulative_states_visited_xy)
 
             p[tuple(ant_utils.discretize_state(obs, norm, env))] += 1
-            p_xy[tuple(ant_utils.discretize_state_2d(obs, norm))] += 1
+            p_xy[tuple(ant_utils.discretize_state_2d(obs, norm, env))] += 1
             denom += 1
             
             if t == random_T:
@@ -205,10 +212,11 @@ def execute_average_policy(env, policies, T,
                 env.render()
             if done: # CRITICAL: ignore done signal
                 done = False
-                
+            
     env.close()
     rewards /= float(n)
     plotting.reward_vs_t(rewards, epoch)
+    plotting.discretized_histograms(discretized, epoch)
 
     p /= float(denom)
     p_xy /= float(denom)
@@ -338,10 +346,11 @@ def collect_entropy_policies(env, epochs, T, MODEL_DIR=''):
                               start_steps=args.start_steps) 
         policies.append(sac)
         
-        print("Learning autoencoding....")
-        train = collect_avg_obs(env, policies, T=1000, n=10000)
-        test = collect_avg_obs(env, policies, T=1000, n=200)
-        ant_utils.learn_encoding(train, test)
+        if args.autoencode:
+            print("Learning autoencoding....")
+            train = collect_avg_obs(env, policies, T=1000, n=1000)
+            test = collect_avg_obs(env, policies, T=1000, n=200)
+            ant_utils.learn_encoding(train, test)
 
         # Execute the cumulative average policy thus far.
         # Estimate distribution and entropy.

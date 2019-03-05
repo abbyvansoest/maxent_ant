@@ -9,7 +9,6 @@ from core import get_vars
 from spinup.utils.logx import EpochLogger
 
 import ant_utils
-from experience_buffer import ExperienceBuffer
 
 def get_state(env, obs):
     state = env.env.state_vector()
@@ -231,12 +230,12 @@ class AntSoftActorCritic:
                 if p[tuple(ant_utils.discretize_state(o, normalization_factors, self.test_env))] == 0:
                     cumulative_states_visited_baseline += 1
                 states_visited_baseline.append(cumulative_states_visited_baseline)
-                if p_xy[tuple(ant_utils.discretize_state_2d(o, normalization_factors))]  == 0:
+                if p_xy[tuple(ant_utils.discretize_state_2d(o, normalization_factors, self.test_env))]  == 0:
                     cumulative_states_visited_xy_baseline += 1
                 states_visited_xy_baseline.append(cumulative_states_visited_xy_baseline)
                 
                 p[tuple(ant_utils.discretize_state(o, normalization_factors, self.test_env))] += 1
-                p_xy[tuple(ant_utils.discretize_state_2d(o, normalization_factors))] += 1
+                p_xy[tuple(ant_utils.discretize_state_2d(o, normalization_factors, self.test_env))] += 1
                 
                 denom += 1
                 ep_len += 1

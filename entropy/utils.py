@@ -45,6 +45,12 @@ parser.add_argument('--gaussian', action='store_true',
 parser.add_argument('--reduce_dim', type=int, default=5, metavar='rd',
                     help='dimension reduction parameter')
 
+# run config
+parser.add_argument('--avg_N', type=int, default=20, metavar='aN',
+                    help='unique states visited average runs')
+parser.add_argument('--start_steps', type=int, default=10000, metavar='ss',
+                    help='start steps parameter')
+
 # experimental args
 parser.add_argument('--deterministic', action='store_true',
                     help='act deterministically in mixed policy')
@@ -56,20 +62,16 @@ parser.add_argument('--max_sigma', action='store_true',
                     help='use max sigma approach in policy averaging')
 parser.add_argument('--grad_ent', action='store_true',
                     help='use original gradient of entropy rewards')
-parser.add_argument('--avg_N', type=int, default=20, metavar='aN',
-                    help='unique states visited average runs')
-parser.add_argument('--start_steps', type=int, default=10000, metavar='ss',
-                    help='start steps parameter')
 parser.add_argument('--initial_state', action='store_true',
                     help='seed learning policies with initial state')
 
 # autoencoder args
 parser.add_argument('--autoencode', action='store_true',
                     help='reduce dimension with autoencoder')
+parser.add_argument('--autoencode2d', action='store_true',
+                    help='reduce dimension with autoencoder for 2d representation')
 parser.add_argument('--autoencoder_reduce_dim', type=int, default=6, metavar='ard',
                     help='reduction dimension for autoencoding')
-parser.add_argument('--autoencoder_norm', action='store_true',
-                    help='normalize state vectors learned by autoencoder')
 parser.add_argument('--reuse_net', action='store_true',
                     help='make new autoencoder on each epoch')
 

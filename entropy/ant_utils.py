@@ -63,6 +63,8 @@ min_bin_2d = -20
 max_bin_2d = 20
 num_bins_2d = 20
 
+n_bins_autoencoder = 10
+
 reduce_dim = args.reduce_dim
 expected_state_dim = len(special) + reduce_dim
 G = np.transpose(np.random.normal(0, 1, (state_dim - len(special), reduce_dim)))
@@ -84,14 +86,13 @@ def learn_encoding(train, test):
         autoencoder = CustomAutoencoder(num_input=29, 
                                 num_hid1=24, num_hid2=16,
                                 reduce_dim=args.autoencoder_reduce_dim, 
-                                normalize=args.autoencoder_norm, 
                                 printfn=utils.log_statement)
     autoencoder.set_data(train)
     autoencoder.set_test_data(test)
     autoencoder.train()
     
     # set normalization factors
-    norm_factors.append(autoencoder.test(iterations=5))
+    norm_factors.append(autoencoder.test(iterations=5000))
     
     autoencoders.append(autoencoder)
 
@@ -134,13 +135,19 @@ def get_state_bins_reduced():
 def get_state_bins_autoencoder():
     state_bins = []
     for i in range(args.autoencoder_reduce_dim):
-        state_bins.append(discretize_range(-1, 1, 10))
+        state_bins.append(discretize_range(-1, 1, n_bins_autoencoder)) 
     return state_bins
 
 def get_state_bins_2d_state():
     state_bins = []
     for i in range(start, stop):
         state_bins.append(discretize_range(min_bin_2d, max_bin_2d, num_bins_2d))
+        
+    if args.autoencode:
+        state_bins = []
+        for i in range(start, stop):
+            state_bins.append(discretize_range(-1, 1, num_bins_2d))
+    
     return state_bins
 
 def get_num_states(state_bins):
@@ -162,10 +169,18 @@ state_bins_2d = get_state_bins_2d_state()
 num_states_2d = tuple([num_bins_2d for i in range(start, stop)])
 
 # Discretize the observation features and reduce them to a single list.
-def discretize_state_2d(observation, norm=[]):
+def discretize_state_2d(obs, norm=[], env=None):
+    
+    # DO THIS if you want to examine the distribution over the 
+    # autoencoded dimensions. Otherwise, it'll examine xy still
+    if args.autoencode2d and env is not None:
+        obs = env.env._get_obs()[:29]
+        obs = autoencoders[-1].encode(obs).flatten()
+        obs = np.divide(obs, norm_factors[-1])
+    
     state = []
     for i in range(start, stop):
-        feature = observation[i]
+        feature = obs[i]
         state.append(discretize_value(feature, state_bins_2d[i - start]))
     return state
 
@@ -192,6 +207,7 @@ def discretize_state_reduced(observation, norm=[]):
 
 # Discretize the observation features and reduce them to a single list.
 def discretize_state_autoencoder(env):
+    
     obs = env.env._get_obs()[:29]
     obs = autoencoders[-1].encode(obs).flatten()
     obs = np.divide(obs, norm_factors[-1])
