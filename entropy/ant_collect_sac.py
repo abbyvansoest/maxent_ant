@@ -307,8 +307,8 @@ def collect_entropy_policies(env, epochs, T, MODEL_DIR=''):
 
         if args.render:
             epoch = 'epoch_%02d/' % (i) 
-            sac.record(T, video_dir=video_dir+'/entropy/'+epoch, on_policy=True) 
-            sac.record(T, video_dir=video_dir+'/baseline/'+epoch, on_policy=False) 
+            sac.record(T=1000, video_dir=video_dir+'/entropy/'+epoch, on_policy=True) 
+            sac.record(T=1000, video_dir=video_dir+'/baseline/'+epoch, on_policy=False) 
         
         # Execute the cumulative average policy thus far.
         # Estimate distribution and entropy.

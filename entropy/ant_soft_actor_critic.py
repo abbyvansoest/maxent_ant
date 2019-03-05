@@ -269,6 +269,10 @@ class AntSoftActorCritic:
             else:
                 a = wrapped_env.unwrapped.action_space.sample()
             o, r, d, _ = wrapped_env.step(a)
+            if d:
+                wrapped_env.reset()
+                break
+        wrapped_env.close()
 
 
     def soft_actor_critic(self, initial_state=[], steps_per_epoch=5000, epochs=100,
