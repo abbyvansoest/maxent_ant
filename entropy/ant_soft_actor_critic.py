@@ -199,7 +199,7 @@ class AntSoftActorCritic:
                 ep_len += 1
                 denom += 1
                 
-                if d and reset:
+                if d:
                     d = False
 
             if store_log:
